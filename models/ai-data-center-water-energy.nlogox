@@ -1,0 +1,734 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model version="NetLogo 7.0.4" snapToGrid="false">
+  <code><![CDATA[globals [
+  months-elapsed
+  compute-demand-mw
+  total-it-load-mw
+  unserved-compute-demand-mw
+  total-it-energy-kwh
+  total-facility-energy-kwh
+  data-center-site-water-ml
+  data-center-freshwater-request-ml
+  data-center-freshwater-supplied-ml
+  community-freshwater-request-ml
+  community-freshwater-supplied-ml
+  effective-recharge-ml
+  spilled-water-ml
+  water-shortage-ml
+  water-stress-ratio
+  community-service-percent
+  data-center-water-service-percent
+  monthly-emissions-tonnes
+  cumulative-emissions-tonnes
+]
+
+breed [data-centers data-center]
+breed [communities community]
+breed [water-sources water-source]
+
+data-centers-own [
+  it-capacity-mw
+  it-load-mw
+  it-energy-kwh-month
+  facility-energy-kwh-month
+  site-water-ml-month
+  freshwater-request-ml
+  freshwater-supplied-ml
+  water-service-percent
+]
+
+communities-own [
+  freshwater-request-ml
+  freshwater-supplied-ml
+  service-percent
+]
+
+water-sources-own [
+  stored-water-ml
+  capacity-ml
+  recharge-ml-this-month
+]
+
+;; One tick represents one 30-day month.
+;; All scenario inputs are illustrative teaching assumptions.
+
+to setup
+  clear-all
+  random-seed seed-value
+  paint-world
+
+  create-water-sources 1 [
+    setxy 0 10
+    set shape "circle"
+    set size 4
+    set color blue
+    set capacity-ml reservoir-capacity-ml
+    set stored-water-ml reservoir-capacity-ml
+    set recharge-ml-this-month 0
+    set label "shared water"
+  ]
+
+  create-communities 1 [
+    setxy -10 -2
+    set shape "house"
+    set size 4
+    set color green
+    set freshwater-request-ml 0
+    set freshwater-supplied-ml 0
+    set service-percent 100
+    set label "community"
+  ]
+
+  create-data-centers (min (list initial-data-centers maximum-data-centers)) [
+    initialize-data-center
+  ]
+
+  set compute-demand-mw count data-centers * facility-capacity-mw * initial-utilization-percent / 100
+  set months-elapsed 0
+  set cumulative-emissions-tonnes 0
+  reset-monthly-totals
+  reset-ticks
+  update-visuals
+end
+
+to setup-scenario
+  load-scenario
+  setup
+end
+
+to setup-rainfall-experiment
+  ;; BehaviorSpace assigns the seed before setup. Preserve it when loading the preset.
+  let experiment-seed seed-value
+  load-scenario
+  set rainfall-variability-percent 20
+  set seed-value experiment-seed
+  setup
+end
+
+to setup-allocation-experiment
+  ;; BehaviorSpace assigns the policy before setup. Preserve it across the preset load.
+  let experiment-policy water-allocation-policy
+  load-scenario
+  set water-allocation-policy experiment-policy
+  setup
+end
+
+to paint-world
+  ask patches [
+    ifelse pycor > 6
+      [ set pcolor 95 ]
+      [ ifelse pxcor < -4 [ set pcolor 57 ] [ set pcolor 9.5 ] ]
+  ]
+end
+
+to initialize-data-center
+  setxy (5 + random-float 9) (-8 + random-float 11)
+  set shape "square"
+  set size 2.5
+  set color cyan
+  set it-capacity-mw facility-capacity-mw
+  set it-load-mw 0
+  set it-energy-kwh-month 0
+  set facility-energy-kwh-month 0
+  set site-water-ml-month 0
+  set freshwater-request-ml 0
+  set freshwater-supplied-ml 0
+  set water-service-percent 100
+  set label (word "DC " who)
+end
+
+to reset-monthly-totals
+  set total-it-load-mw 0
+  set unserved-compute-demand-mw 0
+  set total-it-energy-kwh 0
+  set total-facility-energy-kwh 0
+  set data-center-site-water-ml 0
+  set data-center-freshwater-request-ml 0
+  set data-center-freshwater-supplied-ml 0
+  set community-freshwater-request-ml 0
+  set community-freshwater-supplied-ml 0
+  set effective-recharge-ml 0
+  set spilled-water-ml 0
+  set water-shortage-ml 0
+  set water-stress-ratio 0
+  set community-service-percent 100
+  set data-center-water-service-percent 100
+  set monthly-emissions-tonnes 0
+end
+
+to go
+  if ticks >= simulation-years * 12 [ stop ]
+  reset-monthly-totals
+  set months-elapsed ticks + 1
+  grow-compute-demand
+  expand-data-center-capacity
+  assign-it-load
+  calculate-resource-requests
+  recharge-water-source
+  allocate-shared-water
+  update-visuals
+  check-invariants
+  tick
+end
+
+to grow-compute-demand
+  set compute-demand-mw compute-demand-mw * ((1 + annual-ai-demand-growth-percent / 100) ^ (1 / 12))
+end
+
+to expand-data-center-capacity
+  let required-centers min (list maximum-data-centers (ceiling (compute-demand-mw / facility-capacity-mw)))
+  if required-centers > count data-centers [
+    create-data-centers (required-centers - count data-centers) [ initialize-data-center ]
+  ]
+end
+
+to assign-it-load
+  let installed-capacity-mw sum [it-capacity-mw] of data-centers
+  set total-it-load-mw min (list compute-demand-mw installed-capacity-mw)
+  set unserved-compute-demand-mw max (list 0 (compute-demand-mw - installed-capacity-mw))
+  let load-per-center-mw total-it-load-mw / count data-centers
+  ask data-centers [
+    set it-load-mw min (list it-capacity-mw load-per-center-mw)
+  ]
+end
+
+to calculate-resource-requests
+  ask data-centers [
+    set it-energy-kwh-month monthly-it-energy-kwh-for it-load-mw
+    set facility-energy-kwh-month monthly-facility-energy-kwh-for it-energy-kwh-month pue
+    set site-water-ml-month monthly-site-water-ml-for it-energy-kwh-month wue-liters-per-kwh
+    set freshwater-request-ml monthly-freshwater-ml-for site-water-ml-month reclaimed-water-percent
+  ]
+
+  set total-it-energy-kwh sum [it-energy-kwh-month] of data-centers
+  set total-facility-energy-kwh sum [facility-energy-kwh-month] of data-centers
+  set data-center-site-water-ml sum [site-water-ml-month] of data-centers
+  set data-center-freshwater-request-ml sum [freshwater-request-ml] of data-centers
+  set community-freshwater-request-ml community-demand-ml-per-day * 30
+  ask communities [ set freshwater-request-ml community-freshwater-request-ml ]
+
+  set monthly-emissions-tonnes monthly-emissions-tonnes-for
+    total-facility-energy-kwh
+    grid-emissions-kg-per-kwh
+    renewable-electricity-percent
+  set cumulative-emissions-tonnes cumulative-emissions-tonnes + monthly-emissions-tonnes
+end
+
+to recharge-water-source
+  let rainfall-factor 1
+  if rainfall-variability-percent > 0 [
+    set rainfall-factor max (list 0 (random-normal 1 (rainfall-variability-percent / 100)))
+  ]
+  set effective-recharge-ml base-monthly-recharge-ml *
+    (1 - drought-severity-percent / 100) * rainfall-factor
+
+  ask one-of water-sources [
+    set recharge-ml-this-month effective-recharge-ml
+    set spilled-water-ml max (list 0 (stored-water-ml + recharge-ml-this-month - capacity-ml))
+    set stored-water-ml min (list capacity-ml (stored-water-ml + recharge-ml-this-month))
+  ]
+end
+
+to allocate-shared-water
+  let source one-of water-sources
+  let allocation allocate-requests
+    ([stored-water-ml] of source)
+    community-freshwater-request-ml
+    data-center-freshwater-request-ml
+    water-allocation-policy
+
+  set community-freshwater-supplied-ml item 0 allocation
+  set data-center-freshwater-supplied-ml item 1 allocation
+
+  ask source [
+    set stored-water-ml max (list 0
+      (stored-water-ml - community-freshwater-supplied-ml - data-center-freshwater-supplied-ml))
+  ]
+
+  ask communities [
+    set freshwater-supplied-ml community-freshwater-supplied-ml
+    ifelse freshwater-request-ml = 0
+      [ set service-percent 100 ]
+      [ set service-percent 100 * freshwater-supplied-ml / freshwater-request-ml ]
+  ]
+
+  ask data-centers [
+    ifelse data-center-freshwater-request-ml = 0
+      [
+        set freshwater-supplied-ml 0
+        set water-service-percent 100
+      ]
+      [
+        set freshwater-supplied-ml
+          data-center-freshwater-supplied-ml * freshwater-request-ml /
+          data-center-freshwater-request-ml
+        set water-service-percent 100 * freshwater-supplied-ml / freshwater-request-ml
+      ]
+  ]
+
+  set community-service-percent [service-percent] of one-of communities
+  ifelse data-center-freshwater-request-ml = 0
+    [ set data-center-water-service-percent 100 ]
+    [
+      set data-center-water-service-percent
+        100 * data-center-freshwater-supplied-ml / data-center-freshwater-request-ml
+    ]
+
+  set water-shortage-ml
+    (community-freshwater-request-ml + data-center-freshwater-request-ml) -
+    (community-freshwater-supplied-ml + data-center-freshwater-supplied-ml)
+  set water-stress-ratio
+    (community-freshwater-request-ml + data-center-freshwater-request-ml) /
+    max (list 0.000001 effective-recharge-ml)
+end
+
+to update-visuals
+  if any? water-sources [
+    ask one-of water-sources [
+      set color scale-color blue stored-water-ml 0 capacity-ml
+      set label (word (precision stored-water-ml 0) " ML")
+    ]
+  ]
+  ask communities [
+    set color ifelse-value (service-percent >= 99.999) [green] [orange]
+  ]
+  ask data-centers [
+    set color ifelse-value (water-service-percent >= 99.999) [cyan] [violet]
+  ]
+end
+
+to check-invariants
+  let source one-of water-sources
+  if [stored-water-ml] of source < -0.000001 [ error "Reservoir stock became negative." ]
+  if [stored-water-ml] of source > [capacity-ml] of source + 0.000001 [ error "Reservoir exceeded capacity." ]
+  if community-freshwater-supplied-ml > community-freshwater-request-ml + 0.000001 [
+    error "Community supply exceeded request."
+  ]
+  if data-center-freshwater-supplied-ml > data-center-freshwater-request-ml + 0.000001 [
+    error "Data-center supply exceeded request."
+  ]
+  if (community-service-percent < 0) or (community-service-percent > 100.000001) [
+    error "Community service left the 0-100 range."
+  ]
+  if (data-center-water-service-percent < 0) or (data-center-water-service-percent > 100.000001) [
+    error "Data-center service left the 0-100 range."
+  ]
+  if water-shortage-ml < -0.000001 [ error "Water shortage became negative." ]
+  if cumulative-emissions-tonnes < -0.000001 [ error "Cumulative emissions became negative." ]
+end
+
+to load-scenario
+  ;; Shared assumptions make the scenario comparison controlled and readable.
+  set initial-data-centers 1
+  set facility-capacity-mw 50
+  set initial-utilization-percent 70
+  set maximum-data-centers 20
+  set grid-emissions-kg-per-kwh 0.50
+  set reservoir-capacity-ml 2400
+  set base-monthly-recharge-ml 650
+  set community-demand-ml-per-day 10
+  set rainfall-variability-percent 0
+  set simulation-years 10
+  set seed-value 42
+  set water-allocation-policy "proportional"
+
+  ifelse scenario = "Reference baseline" [
+    set annual-ai-demand-growth-percent 15
+    set pue 1.60
+    set wue-liters-per-kwh 1.0
+    set reclaimed-water-percent 0
+    set renewable-electricity-percent 25
+    set drought-severity-percent 0
+  ] [
+    ifelse scenario = "Rapid growth + drought" [
+      set annual-ai-demand-growth-percent 30
+      set pue 1.60
+      set wue-liters-per-kwh 1.2
+      set reclaimed-water-percent 0
+      set renewable-electricity-percent 25
+      set drought-severity-percent 40
+    ] [
+      ifelse scenario = "Efficiency + reuse" [
+        set annual-ai-demand-growth-percent 30
+        set pue 1.30
+        set wue-liters-per-kwh 0.4
+        set reclaimed-water-percent 60
+        set renewable-electricity-percent 75
+        set drought-severity-percent 40
+      ] [
+        error (word "Unknown scenario: " scenario)
+      ]
+    ]
+  ]
+end
+
+to-report monthly-it-energy-kwh-for [it-load-mw-value]
+  report it-load-mw-value * 1000 * 720
+end
+
+to-report monthly-site-water-ml-for [it-energy-kwh-value wue-value]
+  ;; WUE is liters per IT kWh, so PUE-adjusted facility energy is not used here.
+  report it-energy-kwh-value * wue-value / 1000000
+end
+
+to-report monthly-facility-energy-kwh-for [it-energy-kwh-value pue-value]
+  report it-energy-kwh-value * pue-value
+end
+
+to-report monthly-freshwater-ml-for [site-water-ml-value reuse-percent-value]
+  report site-water-ml-value * (1 - reuse-percent-value / 100)
+end
+
+to-report monthly-emissions-tonnes-for [facility-energy-kwh-value grid-factor-value renewable-percent-value]
+  report facility-energy-kwh-value * grid-factor-value *
+    (1 - renewable-percent-value / 100) / 1000
+end
+
+to-report allocate-requests [available-water-ml community-request-ml-value data-center-request-ml-value policy]
+  let total-request-ml community-request-ml-value + data-center-request-ml-value
+  if total-request-ml = 0 [ report (list 0 0) ]
+  if total-request-ml <= available-water-ml [
+    report (list community-request-ml-value data-center-request-ml-value)
+  ]
+  if policy = "community-first" [
+    let community-supply min (list community-request-ml-value available-water-ml)
+    report (list community-supply
+      (min (list data-center-request-ml-value (available-water-ml - community-supply))))
+  ]
+  if policy = "data-center-first" [
+    let data-center-supply min (list data-center-request-ml-value available-water-ml)
+    report (list
+      (min (list community-request-ml-value (available-water-ml - data-center-supply)))
+      data-center-supply)
+  ]
+  let supply-ratio available-water-ml / total-request-ml
+  report (list
+    (community-request-ml-value * supply-ratio)
+    (data-center-request-ml-value * supply-ratio))
+end
+
+to-report reservoir-stock-ml
+  ifelse any? water-sources
+    [ report [stored-water-ml] of one-of water-sources ]
+    [ report 0 ]
+end
+
+to-report reservoir-percent
+  if not any? water-sources [ report 0 ]
+  let source one-of water-sources
+  if [capacity-ml] of source = 0 [ report 0 ]
+  report 100 * [stored-water-ml] of source / [capacity-ml] of source
+end
+
+to assert-close [test-name actual expected tolerance]
+  if abs (actual - expected) > tolerance [
+    error (word test-name " expected " expected " but got " actual)
+  ]
+end
+
+to run-self-tests
+  assert-close "one MW monthly IT energy" (monthly-it-energy-kwh-for 1) 720000 0.0001
+  assert-close "WUE water conversion" (monthly-site-water-ml-for 720000 1) 0.72 0.0001
+  assert-close "PUE facility energy" (monthly-facility-energy-kwh-for 720000 1.6) 1152000 0.0001
+  assert-close "reclaimed water" (monthly-freshwater-ml-for 36 50) 18 0.0001
+  assert-close "operational emissions" (monthly-emissions-tonnes-for 57600000 0.5 20) 23040 0.0001
+
+  let community-first allocate-requests 100 80 40 "community-first"
+  assert-close "community-first community" (item 0 community-first) 80 0.0001
+  assert-close "community-first data center" (item 1 community-first) 20 0.0001
+
+  let data-center-first allocate-requests 100 80 40 "data-center-first"
+  assert-close "data-center-first community" (item 0 data-center-first) 60 0.0001
+  assert-close "data-center-first data center" (item 1 data-center-first) 40 0.0001
+
+  let proportional allocate-requests 100 80 40 "proportional"
+  assert-close "proportional community" (item 0 proportional) 66.6666667 0.0001
+  assert-close "proportional data center" (item 1 proportional) 33.3333333 0.0001
+
+  let enough-water allocate-requests 200 80 40 "proportional"
+  assert-close "enough water community" (item 0 enough-water) 80 0.0001
+  assert-close "enough water data center" (item 1 enough-water) 40 0.0001
+
+  let no-request allocate-requests 0 0 0 "proportional"
+  assert-close "zero request community" (item 0 no-request) 0 0.0001
+  assert-close "zero request data center" (item 1 no-request) 0 0.0001
+
+  print "SELF-TESTS PASSED"
+end]]></code>
+  <widgets>
+    <button x="5" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="105" display="load-scenario">load-scenario</button>
+    <button x="115" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="75">setup</button>
+    <button x="195" y="10" height="40" disableUntilTicks="true" forever="true" kind="Observer" width="70">go</button>
+    <button x="270" y="10" height="40" disableUntilTicks="true" forever="false" kind="Observer" width="85" display="go-once">go</button>
+    <button x="360" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="125">run-self-tests</button>
+
+    <chooser x="5" y="58" height="60" variable="scenario" current="0" width="235" display="scenario">
+      <choice type="string" value="Reference baseline"></choice>
+      <choice type="string" value="Rapid growth + drought"></choice>
+      <choice type="string" value="Efficiency + reuse"></choice>
+    </chooser>
+    <chooser x="250" y="58" height="60" variable="water-allocation-policy" current="0" width="235" display="water-allocation-policy">
+      <choice type="string" value="proportional"></choice>
+      <choice type="string" value="community-first"></choice>
+      <choice type="string" value="data-center-first"></choice>
+    </chooser>
+
+    <slider x="5" y="125" width="235" height="50" min="1" max="10" step="1" default="1" direction="Horizontal" variable="initial-data-centers" display="initial-data-centers"></slider>
+    <slider x="5" y="177" width="235" height="50" min="10" max="200" step="10" default="50" direction="Horizontal" variable="facility-capacity-mw" display="facility-capacity-mw" units="MW"></slider>
+    <slider x="5" y="229" width="235" height="50" min="10" max="100" step="5" default="70" direction="Horizontal" variable="initial-utilization-percent" display="initial-utilization-percent" units="%"></slider>
+    <slider x="5" y="281" width="235" height="50" min="0" max="60" step="1" default="15" direction="Horizontal" variable="annual-ai-demand-growth-percent" display="annual-ai-demand-growth-percent" units="%/year"></slider>
+    <slider x="5" y="333" width="235" height="50" min="1" max="30" step="1" default="20" direction="Horizontal" variable="maximum-data-centers" display="maximum-data-centers"></slider>
+    <slider x="5" y="385" width="235" height="50" min="1" max="3" step="0.05" default="1.6" direction="Horizontal" variable="pue" display="pue"></slider>
+    <slider x="5" y="437" width="235" height="50" min="0" max="5" step="0.1" default="1" direction="Horizontal" variable="wue-liters-per-kwh" display="wue-liters-per-kwh" units="L/kWh"></slider>
+    <slider x="5" y="489" width="235" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="reclaimed-water-percent" display="reclaimed-water-percent" units="%"></slider>
+
+    <slider x="250" y="125" width="235" height="50" min="0" max="100" step="5" default="25" direction="Horizontal" variable="renewable-electricity-percent" display="renewable-electricity-percent" units="%"></slider>
+    <slider x="250" y="177" width="235" height="50" min="0" max="1.5" step="0.05" default="0.5" direction="Horizontal" variable="grid-emissions-kg-per-kwh" display="grid-emissions-kg-per-kwh" units="kg/kWh"></slider>
+    <slider x="250" y="229" width="235" height="50" min="100" max="10000" step="100" default="2400" direction="Horizontal" variable="reservoir-capacity-ml" display="reservoir-capacity-ml" units="ML"></slider>
+    <slider x="250" y="281" width="235" height="50" min="0" max="2000" step="50" default="650" direction="Horizontal" variable="base-monthly-recharge-ml" display="base-monthly-recharge-ml" units="ML/month"></slider>
+    <slider x="250" y="333" width="235" height="50" min="0" max="100" step="1" default="10" direction="Horizontal" variable="community-demand-ml-per-day" display="community-demand-ml-per-day" units="ML/day"></slider>
+    <slider x="250" y="385" width="235" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="drought-severity-percent" display="drought-severity-percent" units="%"></slider>
+    <slider x="250" y="437" width="235" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="rainfall-variability-percent" display="rainfall-variability-percent" units="%"></slider>
+    <slider x="250" y="489" width="235" height="50" min="1" max="30" step="1" default="10" direction="Horizontal" variable="simulation-years" display="simulation-years" units="years"></slider>
+    <slider x="250" y="541" width="235" height="50" min="1" max="10000" step="1" default="42" direction="Horizontal" variable="seed-value" display="seed-value"></slider>
+
+    <note x="5" y="548" width="235" height="72" fontSize="11" markdown="true" textColorLight="-16777216" textColorDark="-1" backgroundLight="0" backgroundDark="0">**Evidence boundary:** scenario values are illustrative. This is not a forecast or digital twin of PAX Silica.</note>
+
+    <view x="500" y="10" width="490" height="370" minPxcor="-16" maxPxcor="16" minPycor="-12" maxPycor="12" patchSize="14.0" wrappingAllowedX="false" wrappingAllowedY="false" frameRate="30.0" updateMode="1" showTickCounter="true" tickCounterLabel="months" fontSize="11"></view>
+
+    <monitor x="1005" y="10" width="150" height="55" precision="0" fontSize="11" display="months elapsed">months-elapsed</monitor>
+    <monitor x="1165" y="10" width="150" height="55" precision="0" fontSize="11" display="data centers">count data-centers</monitor>
+    <monitor x="1005" y="70" width="150" height="55" precision="2" fontSize="11" display="IT load (MW)">total-it-load-mw</monitor>
+    <monitor x="1165" y="70" width="150" height="55" precision="2" fontSize="11" display="unserved compute (MW)">unserved-compute-demand-mw</monitor>
+    <monitor x="1005" y="130" width="150" height="55" precision="2" fontSize="11" display="reservoir (ML)">reservoir-stock-ml</monitor>
+    <monitor x="1165" y="130" width="150" height="55" precision="1" fontSize="11" display="reservoir (%)">reservoir-percent</monitor>
+    <monitor x="1005" y="190" width="150" height="55" precision="2" fontSize="11" display="DC freshwater request (ML)">data-center-freshwater-request-ml</monitor>
+    <monitor x="1165" y="190" width="150" height="55" precision="1" fontSize="11" display="community service (%)">community-service-percent</monitor>
+    <monitor x="1005" y="250" width="150" height="55" precision="1" fontSize="11" display="DC water service (%)">data-center-water-service-percent</monitor>
+    <monitor x="1165" y="250" width="150" height="55" precision="1" fontSize="11" display="emissions (t/month)">monthly-emissions-tonnes</monitor>
+    <monitor x="1005" y="310" width="310" height="55" precision="1" fontSize="11" display="cumulative operational emissions (t)">cumulative-emissions-tonnes</monitor>
+
+    <plot x="500" y="395" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="2500" autoPlotX="true" autoPlotY="true" legend="true" xAxis="month" yAxis="ML" display="Shared Water">
+      <setup></setup>
+      <update><![CDATA[set-current-plot "Shared Water"
+set-current-plot-pen "reservoir ML"
+plot reservoir-stock-ml
+set-current-plot-pen "community request ML"
+plot community-freshwater-request-ml
+set-current-plot-pen "data-center request ML"
+plot data-center-freshwater-request-ml]]></update>
+      <pen interval="1" mode="0" display="reservoir ML" color="-13345367" legend="true"><setup></setup><update></update></pen>
+      <pen interval="1" mode="0" display="community request ML" color="-10899396" legend="true"><setup></setup><update></update></pen>
+      <pen interval="1" mode="0" display="data-center request ML" color="-2674135" legend="true"><setup></setup><update></update></pen>
+    </plot>
+
+    <plot x="825" y="395" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="100" autoPlotX="true" autoPlotY="false" legend="true" xAxis="month" yAxis="service %" display="Service Levels">
+      <setup></setup>
+      <update><![CDATA[set-current-plot "Service Levels"
+set-current-plot-pen "community %"
+plot community-service-percent
+set-current-plot-pen "data-center %"
+plot data-center-water-service-percent]]></update>
+      <pen interval="1" mode="0" display="community %" color="-10899396" legend="true"><setup></setup><update></update></pen>
+      <pen interval="1" mode="0" display="data-center %" color="-8630108" legend="true"><setup></setup><update></update></pen>
+    </plot>
+
+    <plot x="1150" y="395" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="100" autoPlotX="true" autoPlotY="true" legend="true" xAxis="month" yAxis="scaled monthly value" display="Energy and Emissions">
+      <setup></setup>
+      <update><![CDATA[set-current-plot "Energy and Emissions"
+set-current-plot-pen "facility GWh/month"
+plot total-facility-energy-kwh / 1000000
+set-current-plot-pen "emissions kt/month"
+plot monthly-emissions-tonnes / 1000]]></update>
+      <pen interval="1" mode="0" display="facility GWh/month" color="-7500403" legend="true"><setup></setup><update></update></pen>
+      <pen interval="1" mode="0" display="emissions kt/month" color="-2674135" legend="true"><setup></setup><update></update></pen>
+    </plot>
+  </widgets>
+
+  <info><![CDATA[## WHAT IS IT?
+
+This neutral STS classroom model explores how hypothetical AI data-center growth can interact with a shared freshwater supply, nearby community demand, infrastructure efficiency, and operational electricity emissions. It is not a forecast or digital twin of PAX Silica.
+
+## HOW IT WORKS
+
+One tick represents a 30-day month. Compute demand grows, facilities are added when installed capacity is insufficient, and served IT load determines IT energy. WUE converts IT energy into site water. Reclaimed water reduces freshwater withdrawal but does not erase total site water use. PUE converts IT energy into total facility energy. The chosen grid factor and renewable share determine modeled operational emissions. The community and data centers request water from one recharging source; the selected allocation policy determines who receives scarce water.
+
+## HOW TO USE IT
+
+Choose a scenario, click LOAD-SCENARIO, click SETUP, and click GO. Compare RAPID GROWTH + DROUGHT with EFFICIENCY + REUSE. During a shortage, change only the allocation policy and discuss who benefits, who bears the shortfall, and who should decide.
+
+## THINGS TO NOTICE
+
+More facilities do not automatically mean a shortage; outcomes also depend on demand, WUE, reuse, recharge, drought, and community demand. Better PUE lowers electricity and modeled emissions but does not directly change the WUE water equation. Reclaimed water lowers freshwater withdrawal while total site water can remain unchanged. Allocation policy redistributes shortage without creating more water.
+
+## THINGS TO TRY
+
+Hold growth and drought constant while changing WUE. Hold WUE constant while changing reclaimed water. Hold energy constant while changing renewable share. Create a shortage and compare all three allocation rules. Turn on rainfall variability, keep the seed fixed, and then change only the seed.
+
+## MODEL ASSUMPTIONS AND LIMITATIONS
+
+All scenario values except explicitly cited metric definitions are illustrative. The shared reservoir is an aggregate stock, not a hydrological model. Renewable electricity is treated as zero operational emissions, and lifecycle emissions are excluded. A data-center water shortfall is displayed but does not shut down IT load in the same tick. Construction delay, manufacturing, jobs, costs, biodiversity, e-waste, groundwater flow, and embodied impacts are outside the MVP.
+
+## STS AND SDGS
+
+Science appears in transparent equations and experiments. Technology appears in compute, cooling-water efficiency, facility efficiency, reuse, and electricity mix. Society appears in shared-resource access and allocation policy. The model connects to SDG 6 through water efficiency and access, SDG 9 through infrastructure, SDG 12 through resource efficiency and reuse, and SDG 13 through energy-related emissions.
+
+## SOURCES
+
+Presidential Communications Office / BCDA, "BCDA says Pax Silica project could generate over 130,000 high-quality jobs," July 23, 2026.
+
+U.S. Department of Energy FEMP, "Cooling Water Efficiency Opportunities for Federal Data Centers," January 9, 2019.
+
+U.S. Department of Energy FEMP, "Best Practices Guide for Energy-Efficient Data Center Design," July 2024.
+
+NetLogo User Manual, "BehaviorSpace."
+
+IBM, "What Is an AI Data Center?"
+
+Penn State Institute of Energy and the Environment, "Why AI Uses So Much Energy and What We Can Do About It."
+
+Brookings Institution, "The Future of Data Centers."
+
+## CREDITS
+
+Created for a Science, Technology, and Society course project. Model authors must add their group names before submission.]]></info>
+
+  <turtleShapes>
+    <shape name="default" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="5"></point><point x="40" y="250"></point><point x="150" y="205"></point><point x="260" y="250"></point>
+      </polygon>
+    </shape>
+    <shape name="circle" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+    </shape>
+    <shape name="house" rotatable="false" editableColorIndex="0">
+      <rectangle endX="255" startY="120" marked="true" color="-1920102913" endY="285" startX="45" filled="true"></rectangle>
+      <rectangle endX="180" startY="210" marked="false" color="255" endY="285" startX="120" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="15" y="120"></point><point x="150" y="15"></point><point x="285" y="120"></point>
+      </polygon>
+      <line endX="270" startY="120" marked="false" color="255" endY="120" startX="30"></line>
+    </shape>
+    <shape name="square" rotatable="false" editableColorIndex="0">
+      <rectangle endX="270" startY="30" marked="true" color="-1920102913" endY="270" startX="30" filled="true"></rectangle>
+    </shape>
+  </turtleShapes>
+
+  <linkShapes>
+    <shape name="default" curviness="0.0">
+      <lines>
+        <line x="-0.2" visible="false"><dash value="0.0"></dash><dash value="1.0"></dash></line>
+        <line x="0.0" visible="true"><dash value="1.0"></dash><dash value="0.0"></dash></line>
+        <line x="0.2" visible="false"><dash value="0.0"></dash><dash value="1.0"></dash></line>
+      </lines>
+      <indicator>
+        <shape name="link direction" rotatable="true" editableColorIndex="0">
+          <line endX="90" startY="150" marked="true" color="-1920102913" endY="180" startX="150"></line>
+          <line endX="210" startY="150" marked="true" color="-1920102913" endY="180" startX="150"></line>
+        </shape>
+      </indicator>
+    </shape>
+  </linkShapes>
+
+  <previewCommands>setup-scenario
+repeat 24 [ go ]</previewCommands>
+
+  <experiments>
+    <experiment name="smoke-test" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="120">
+      <setup>run-self-tests
+setup-scenario</setup>
+      <go>go</go>
+      <exitCondition>ticks &gt;= 120</exitCondition>
+      <metrics>
+        <metric>count data-centers</metric>
+        <metric>compute-demand-mw</metric>
+        <metric>unserved-compute-demand-mw</metric>
+        <metric>reservoir-stock-ml</metric>
+        <metric>community-service-percent</metric>
+        <metric>data-center-water-service-percent</metric>
+        <metric>cumulative-emissions-tonnes</metric>
+        <metric>water-stress-ratio</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="scenario"><value value="&quot;Reference baseline&quot;"></value></enumeratedValueSet>
+      </constants>
+    </experiment>
+
+    <experiment name="scenario-comparison" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="120">
+      <setup>setup-scenario</setup>
+      <go>go</go>
+      <exitCondition>ticks &gt;= 120</exitCondition>
+      <metrics>
+        <metric>count data-centers</metric>
+        <metric>compute-demand-mw</metric>
+        <metric>unserved-compute-demand-mw</metric>
+        <metric>reservoir-stock-ml</metric>
+        <metric>community-service-percent</metric>
+        <metric>data-center-water-service-percent</metric>
+        <metric>data-center-freshwater-request-ml</metric>
+        <metric>cumulative-emissions-tonnes</metric>
+        <metric>water-stress-ratio</metric>
+      </metrics>
+      <constants></constants>
+      <subExperiments>
+        <subExperiment>
+          <enumeratedValueSet variable="scenario">
+            <value value="&quot;Reference baseline&quot;"></value>
+            <value value="&quot;Rapid growth + drought&quot;"></value>
+            <value value="&quot;Efficiency + reuse&quot;"></value>
+          </enumeratedValueSet>
+        </subExperiment>
+      </subExperiments>
+    </experiment>
+
+    <experiment name="rainfall-uncertainty" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="120">
+      <setup>setup-rainfall-experiment</setup>
+      <go>go</go>
+      <exitCondition>ticks &gt;= 120</exitCondition>
+      <metrics>
+        <metric>count data-centers</metric>
+        <metric>compute-demand-mw</metric>
+        <metric>unserved-compute-demand-mw</metric>
+        <metric>reservoir-stock-ml</metric>
+        <metric>community-service-percent</metric>
+        <metric>data-center-water-service-percent</metric>
+        <metric>data-center-freshwater-request-ml</metric>
+        <metric>cumulative-emissions-tonnes</metric>
+        <metric>water-stress-ratio</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="scenario"><value value="&quot;Rapid growth + drought&quot;"></value></enumeratedValueSet>
+      </constants>
+      <subExperiments>
+        <subExperiment>
+          <steppedValueSet variable="seed-value" first="1" step="1" last="30"></steppedValueSet>
+        </subExperiment>
+      </subExperiments>
+    </experiment>
+
+    <experiment name="allocation-policy-check" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="120">
+      <setup>setup-allocation-experiment</setup>
+      <go>go</go>
+      <exitCondition>ticks &gt;= 120</exitCondition>
+      <metrics>
+        <metric>community-freshwater-supplied-ml + data-center-freshwater-supplied-ml</metric>
+        <metric>community-service-percent</metric>
+        <metric>data-center-water-service-percent</metric>
+        <metric>water-shortage-ml</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="scenario"><value value="&quot;Rapid growth + drought&quot;"></value></enumeratedValueSet>
+      </constants>
+      <subExperiments>
+        <subExperiment>
+          <enumeratedValueSet variable="water-allocation-policy">
+            <value value="&quot;proportional&quot;"></value>
+            <value value="&quot;community-first&quot;"></value>
+            <value value="&quot;data-center-first&quot;"></value>
+          </enumeratedValueSet>
+        </subExperiment>
+      </subExperiments>
+    </experiment>
+  </experiments>
+</model>
