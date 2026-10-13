@@ -1,0 +1,542 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model version="NetLogo 7.0.4" snapToGrid="false">
+  <code><![CDATA[extensions [bitmap]
+
+breed [households household]
+breed [data-centers data-center]
+turtles-own [slot-index]
+patches-own [land-kind baseline-green vegetation occupied?]
+
+globals [
+  ready? applied-settings
+  it-mw it-utilization power-overhead water-intensity home-water home-power
+  reservoir-limit recharge-rate grid-limit run-months allocation-policy
+  recycled-water? solar? reforestation?
+  reservoir-ml dc-request-ml household-request-ml site-water-ml it-energy-kwh
+  grid-demand-percent green-coverage-percent wellbeing-score
+  last-dc-request last-household-request dc-supplied-ml household-supplied-ml
+  last-recharge-ml spilled-ml shortfall-ml balance-error-ml
+  baseline-vegetation house-slots facility-slots
+  house-icon server-icon tree-icon deer-icon reuse-icon solar-icon
+  experiment-case
+]
+
+;; One tick = 30 days. Every numeric default is an illustrative teaching choice.
+to setup
+  validate-inputs
+  without-interruption [
+    clear-all
+    set applied-settings selected-settings
+    set it-mw facility-capacity-mw
+    set it-utilization utilization-percent / 100
+    set power-overhead pue
+    set water-intensity wue-l-per-kwh
+    set home-water household-liters-day
+    set home-power household-kw
+    set reservoir-limit reservoir-capacity-ml
+    set recharge-rate recharge-ml-month
+    set grid-limit grid-capacity-mw
+    set run-months duration-months
+    set allocation-policy water-allocation-policy
+    set recycled-water? false
+    set solar? false
+    set reforestation? false
+    set house-slots n-values 50 [i -> (list (4 + 4 * (i mod 5)) (45 - 3 * floor (i / 5)))]
+    set facility-slots n-values 50 [i -> (list (40 + 5 * (i mod 10)) (43 - 5 * floor (i / 10)))]
+    initialize-land
+    foreach (sublist house-slots 0 starting-households) [location ->
+      create-households 1 [
+        set slot-index count households - 1
+        setxy item 0 location item 1 location
+        hide-turtle
+        ask patches with [abs (pxcor - [xcor] of myself) <= 1 and abs (pycor - [ycor] of myself) <= 1] [
+          set land-kind "home"
+          set occupied? true
+        ]
+      ]
+    ]
+    ask patches [
+      set baseline-green ifelse-value (land-kind = "land") [1] [0]
+      set vegetation baseline-green
+    ]
+    set baseline-vegetation sum [baseline-green] of patches
+    repeat starting-data-centers [place-facility]
+    set reservoir-ml reservoir-limit
+    load-artwork
+    set ready? true
+    calculate-requests
+    calculate-indicators
+    reset-ticks
+    render-scene
+  ]
+end
+
+to startup
+  setup
+end
+
+to initialize-land
+  ask patches [
+    set occupied? false
+    set land-kind "frame"
+    if pxcor >= 1 and pxcor <= 93 and pycor >= 10 and pycor <= 50 [set land-kind "land"]
+    if land-kind = "land" and abs (pxcor - river-center pycor) <= 3 [set land-kind "river"]
+    if land-kind = "land" and (member? pxcor [23 24 36 37] or member? pycor [13 14]) [set land-kind "road"]
+    if pxcor >= 95 [set land-kind "sidebar"]
+  ]
+end
+
+to-report river-center [y]
+  report 30 + 1.8 * sin (y * 9)
+end
+
+to place-facility
+  let next-slot count data-centers
+  if next-slot >= length facility-slots [stop]
+  let location item next-slot facility-slots
+  let cx item 0 location
+  let cy item 1 location
+  let footprint patches with [abs (pxcor - cx) <= 1 and abs (pycor - cy) <= 1]
+  if count footprint != 9 or any? footprint with [land-kind != "land" or occupied?] [
+    error "Facility slot overlaps protected or occupied land."
+  ]
+  ask patches with [abs (pxcor - cx) <= 2 and abs (pycor - cy) <= 2 and land-kind = "land"] [set vegetation 0]
+  ask footprint [set occupied? true]
+  create-data-centers 1 [
+    set slot-index next-slot
+    setxy cx cy
+    hide-turtle
+  ]
+end
+
+to build-more
+  if not ready? [stop]
+  without-interruption [
+    if complete? or count data-centers >= 50 [stop]
+    place-facility
+    calculate-requests
+    calculate-indicators
+    render-scene
+  ]
+end
+
+to go
+  if not ready? or complete? [stop]
+  ;; Buttons share one observer; keep each month and between-month action atomic.
+  without-interruption [
+    calculate-requests
+    let previous-stock reservoir-ml
+    set last-household-request household-request-ml
+    set last-dc-request dc-request-ml
+    set last-recharge-ml recharge-rate
+    set spilled-ml max (list 0 (reservoir-ml + last-recharge-ml - reservoir-limit))
+    set reservoir-ml min (list reservoir-limit (reservoir-ml + last-recharge-ml))
+    let allocation allocate-requests reservoir-ml household-request-ml dc-request-ml allocation-policy
+    set household-supplied-ml item 0 allocation
+    set dc-supplied-ml item 1 allocation
+    set shortfall-ml max (list 0 (household-request-ml + dc-request-ml - sum allocation))
+    set reservoir-ml max (list 0 (reservoir-ml - sum allocation))
+    set balance-error-ml previous-stock + last-recharge-ml - spilled-ml - sum allocation - reservoir-ml
+    if reforestation? [
+      ask patches with [baseline-green > 0 and not occupied? and vegetation < baseline-green] [
+        set vegetation min (list baseline-green (vegetation + baseline-green / 12))
+        if baseline-green - vegetation < 0.000000001 [set vegetation baseline-green]
+      ]
+    ]
+    calculate-indicators
+    check-invariants
+    tick
+    render-scene
+  ]
+end
+
+;; Same allocation equations as V1; no water is created by a priority policy.
+to-report allocate-requests [available home-request dc-request policy]
+  let total-request home-request + dc-request
+  if total-request = 0 [report (list 0 0)]
+  if total-request <= available [report (list home-request dc-request)]
+  if policy = "community-first" [
+    let home-supply min (list home-request available)
+    report (list home-supply (min (list dc-request (available - home-supply))))
+  ]
+  if policy = "data-center-first" [
+    let dc-supply min (list dc-request available)
+    report (list (min (list home-request (available - dc-supply))) dc-supply)
+  ]
+  let supply-ratio available / total-request
+  report (list (home-request * supply-ratio) (dc-request * supply-ratio))
+end
+
+to check-invariants
+  if abs balance-error-ml > 0.00000001 [error "Water balance failed."]
+  if reservoir-ml < 0 or reservoir-ml > reservoir-limit + 0.00000001 [error "Reservoir out of bounds."]
+  if household-supplied-ml < 0 or household-supplied-ml > last-household-request + 0.00000001 or
+    dc-supplied-ml < 0 or dc-supplied-ml > last-dc-request + 0.00000001 [error "Allocation out of bounds."]
+  if any? patches with [vegetation < 0 or vegetation > baseline-green + 0.00000001 or (occupied? and vegetation > 0)] [
+    error "Vegetation violated the land constraints."
+  ]
+  if count data-centers > 50 or count households > 50 or count turtles != count data-centers + count households [
+    error "Unexpected simulation agents."
+  ]
+end
+
+to-report service-percent [supplied requested]
+  report ifelse-value (requested = 0) [100] [100 * supplied / requested]
+end
+
+to calculate-requests
+  set it-energy-kwh monthly-it-energy-kwh-for (count data-centers * it-mw * it-utilization)
+  set site-water-ml monthly-site-water-ml-for it-energy-kwh water-intensity
+  set dc-request-ml monthly-freshwater-ml-for site-water-ml (ifelse-value recycled-water? [50] [0])
+  set household-request-ml count households * home-water * 30 / 1000000
+  set grid-demand-percent 100 *
+    (count data-centers * it-mw * it-utilization * power-overhead * (ifelse-value solar? [0.6] [1]) +
+      count households * home-power / 1000) / grid-limit
+end
+
+to calculate-indicators
+  set green-coverage-percent 100 * sum [vegetation] of patches / baseline-vegetation
+  set wellbeing-score 0.40 * water-supply-percent + 0.30 * grid-headroom-percent + 0.30 * green-coverage-percent
+end
+
+to-report water-supply-percent
+  report 100 * reservoir-ml / reservoir-limit
+end
+
+to-report grid-headroom-percent
+  report max (list 0 (100 - grid-demand-percent))
+end
+
+to-report condition-for [score]
+  if score >= 75 [report "Healthy"]
+  if score >= 50 [report "Moderate"]
+  if score >= 25 [report "Stressed"]
+  report "Critical"
+end
+
+to-report complete?
+  if not ready? [report false]
+  report ticks >= run-months
+end
+
+to-report selected-settings
+  report (list starting-data-centers starting-households facility-capacity-mw utilization-percent pue
+    wue-l-per-kwh household-liters-day household-kw reservoir-capacity-ml recharge-ml-month
+    grid-capacity-mw duration-months water-allocation-policy)
+end
+
+to validate-inputs
+  foreach (list starting-data-centers starting-households) [n ->
+    if n != floor n or n < 1 or n > 50 [error "Starting counts must be whole numbers from 1 to 50."]
+  ]
+  if facility-capacity-mw < 0 or utilization-percent < 0 or utilization-percent > 100 or pue < 1 or
+    wue-l-per-kwh < 0 or household-liters-day < 0 or household-kw < 0 or reservoir-capacity-ml <= 0 or
+    recharge-ml-month < 0 or grid-capacity-mw <= 0 or duration-months < 1 or duration-months != floor duration-months [
+    error "Invalid assumptions: use nonnegative requests, positive capacities, PUE >= 1 and whole months."
+  ]
+  if not member? water-allocation-policy ["proportional" "community-first" "data-center-first"] [error "Unknown water allocation policy."]
+end
+
+to-report monthly-it-energy-kwh-for [load-mw]
+  report load-mw * 1000 * 720
+end
+
+to-report monthly-site-water-ml-for [energy wue-value]
+  ;; WUE uses IT energy, not PUE-adjusted facility electricity.
+  report energy * wue-value / 1000000
+end
+
+to-report monthly-freshwater-ml-for [site-water reuse-percent]
+  report site-water * (1 - reuse-percent / 100)
+end
+
+to show-statistics
+  if not ready? [stop]
+  ;; Native dialogs already pause forever buttons; Cancel may halt this procedure.
+  user-message statistics-text
+end
+
+to-report statistics-text
+  let last-month ifelse-value (ticks = 0) ["No monthly withdrawal yet. Advance one month.\n"] [
+    (word "LAST COMPLETED MONTH (historical, before any later builds/solutions)\n"
+      "Households: " precision household-supplied-ml 3 " / " precision last-household-request 3 " ML supplied ("
+      precision (service-percent household-supplied-ml last-household-request) 2 "%)\n"
+      "Facilities: " precision dc-supplied-ml 3 " / " precision last-dc-request 3 " ML supplied ("
+      precision (service-percent dc-supplied-ml last-dc-request) 2 "%)\n"
+      "Shortfall: " precision shortfall-ml 3 " ML; recharge: " precision last-recharge-ml 3
+      " ML; spill: " precision spilled-ml 3 " ML\n")
+  ]
+  report (word "Month " ticks " / " run-months " (" precision (ticks / 12) 2 " years)"
+    (ifelse-value complete? [" — COMPLETE; Setup to restart"] [""]) "\n"
+    count households " households; " count data-centers " data centers\n\n"
+    "Water stock: " precision reservoir-ml 3 " / " reservoir-limit " ML (" precision water-supply-percent 2 "%)\n"
+    "Current monthly requests: homes " precision household-request-ml 3 "; facilities " precision dc-request-ml 3 " ML\n"
+    "Grid demand: " precision grid-demand-percent 2 "% (100% = modeled capacity)\n"
+    "Green coverage: " precision green-coverage-percent 2 "% of baseline\n"
+    "Illustrative well-being: " precision wellbeing-score 2 " / 100 — " condition-for wellbeing-score "\n\n"
+    last-month "\nAllocation: " allocation-policy "\n"
+    "Solutions: recycled water " on-off recycled-water? ", solar " on-off solar? ", reforestation " on-off reforestation? "\n\n"
+    "Score = 0.40 × water stock % + 0.30 × max(0, 100 − grid demand %) + 0.30 × green %\n"
+    "Teaching weights and thresholds, not measured human health.\nML = million liters. 1 month = 30 days.")
+end
+
+to choose-solution
+  if not ready? or complete? [stop]
+  let choice user-one-of "Enable one solution; repeat choices never stack. Cancel changes nothing."
+    ["Recycled water (50%)" "Solar energy (40%)" "Reforestation (12 months)"]
+  if choice != false [enable-solution choice]
+end
+
+to enable-solution [choice]
+  if not ready? or complete? [stop]
+  without-interruption [
+    if not member? choice ["Recycled water (50%)" "Solar energy (40%)" "Reforestation (12 months)"] [error "Unknown solution."]
+    if choice = "Recycled water (50%)" [set recycled-water? true]
+    if choice = "Solar energy (40%)" [set solar? true]
+    if choice = "Reforestation (12 months)" [set reforestation? true]
+    calculate-requests
+    calculate-indicators
+    render-scene
+  ]
+end
+
+to load-artwork
+  set house-icon bitmap:scaled (bitmap:import "../assets/cottage.png") 26 26
+  set server-icon bitmap:scaled (bitmap:import "../assets/server.png") 26 26
+  set tree-icon bitmap:scaled (bitmap:import "../assets/deciduous-tree.png") 26 26
+  set deer-icon bitmap:scaled (bitmap:import "../assets/deer.png") 28 28
+  set reuse-icon bitmap:scaled (bitmap:import "../assets/recycling.png") 24 24
+  set solar-icon bitmap:scaled (bitmap:import "../assets/solar-panel.png") 24 24
+end
+
+to draw-art [art cx cy]
+  bitmap:copy-to-drawing art ((cx + 0.5) * patch-size - bitmap:width art / 2)
+    ((max-pycor - cy + 0.5) * patch-size - bitmap:height art / 2)
+end
+
+to caption [cx cy words ink]
+  ask patch cx cy [set plabel words set plabel-color ink]
+end
+
+to render-scene
+  if not ready? [stop]
+  clear-drawing
+  ask patches [
+    set plabel ""
+    set pcolor [20 30 44]
+    if land-kind = "land" [
+      set pcolor (map [[bare lush] -> bare + vegetation * (lush - bare)] [230 218 197] [221 236 215])
+      if occupied? [set pcolor [220 213 239]]
+    ]
+    if land-kind = "home" [set pcolor [232 241 231]]
+    if land-kind = "road" [set pcolor [201 204 200]]
+    if land-kind = "river" [
+      set pcolor [206 219 219]
+      if abs (pxcor - river-center pycor) <= 3 * water-supply-percent / 100 and reservoir-ml > 0 [set pcolor [84 161 207]]
+    ]
+    if land-kind = "sidebar" [set pcolor [27 40 56]]
+  ]
+  ;; Icons are drawing-layer artwork; turtles represent only homes and facilities.
+  ask patches with [land-kind = "land" and not occupied? and vegetation >= 0.5 and
+    (pxcor + 2 * floor (pycor / 5)) mod 5 = 0 and pycor mod 5 = 0 and pxcor > 38 and pycor > 20 and pycor < 48] [draw-art tree-icon pxcor pycor]
+  foreach [[47 43] [67 33] [87 23]] [location ->
+    let p patch item 0 location item 1 location
+    if [vegetation] of p >= 0.75 [draw-art deer-icon item 0 location item 1 location]
+  ]
+  foreach sort households [h -> draw-art house-icon [xcor] of h [ycor] of h]
+  foreach sort data-centers [dc -> draw-art server-icon [xcor] of dc [ycor] of dc]
+  let pale [241 245 249]
+  let ink [20 30 44]
+  if shortfall-ml > 0.000001 [
+    ask patches with [pxcor >= 96 and pxcor <= 124 and pycor >= 38 and pycor <= 52 and
+      (pxcor = 96 or pxcor = 124 or pycor = 38 or pycor = 52)] [set pcolor [180 119 20]]
+  ]
+  caption 43 54 "AI DATA CENTER COMMUNITY" pale
+  caption 92 54 (word (ifelse-value complete? ["COMPLETE · "] [""]) "Month " ticks " / " run-months "   |   Year " precision (ticks / 12) 2) pale
+  caption 23 49 (word "VILLAGE · " count households " homes") ink
+  caption 88 49 (word "FOREST + " count data-centers " DATA CENTERS") [91 33 182]
+  caption 22 15 "1 house = 1 household" ink
+  caption 90 17 (ifelse-value (count data-centers = 50) ["Facility limit reached · 50 / 50"] ["Manual construction · unique 3 × 3 footprints"]) ink
+  caption 92 8 (word "Recycled water: " on-off recycled-water? "   |   Solar: " on-off solar? "   |   Reforestation: " on-off reforestation?) pale
+  if recycled-water? [draw-art reuse-icon 4 8]
+  if solar? [draw-art solar-icon 8 8]
+  caption 92 5 "Blue: water   Amber: grid   Green: vegetation   Purple: data centers" pale
+  caption 92 2 (ifelse-value complete? ["Results frozen; Setup to restart   ·   1 step = 30 days   ·   ML = million liters"]
+    ["1 step = 30 days   ·   ML = million liters   ·   Hypothetical STS / SDG 6 model"]) pale
+
+  caption 122 49 "WATER SUPPLY" [125 211 252]
+  caption 122 46 (word precision water-supply-percent 1 "%  |  " precision reservoir-ml 2 " ML") pale
+  caption 122 43 "Reservoir stock / capacity" pale
+  caption 122 40 (ifelse-value (ticks = 0) ["Ready — step one month"]
+    [ifelse-value (shortfall-ml > 0.000001) ["! Water shortfall last month"] ["Last month: demand met"]]) pale
+  caption 122 36 "GRID DEMAND" [252 211 77]
+  caption 122 33 (word precision grid-demand-percent 2 "% of grid capacity") pale
+  caption 122 30 (ifelse-value (grid-demand-percent > 100) ["! Exceeds capacity"] ["Within modeled capacity"]) pale
+  caption 122 27 "Demand only; no blackouts" pale
+  caption 122 23 "GREEN COVERAGE" [134 239 172]
+  caption 122 20 (word precision green-coverage-percent 1 "% of initial vegetation") pale
+  caption 122 17 (ifelse-value reforestation? ["Restoring unoccupied land"] ["Construction clears land"]) pale
+  caption 122 13 "COMMUNITY WELL-BEING" [216 180 254]
+  caption 122 10 (word precision wellbeing-score 1 " / 100 · " condition-for wellbeing-score) pale
+  caption 122 7 "Illustrative weighted score" pale
+  caption 122 4 "Not measured human health" pale
+end
+
+to-report on-off [enabled?]
+  report ifelse-value enabled? ["ON"] ["OFF"]
+end
+
+to teaching-defaults
+  set starting-data-centers 1
+  set starting-households 10
+  set facility-capacity-mw 1
+  set utilization-percent 70
+  set pue 1.6
+  set wue-l-per-kwh 1
+  set household-liters-day 500
+  set household-kw 2
+  set reservoir-capacity-ml 40
+  set recharge-ml-month 8
+  set grid-capacity-mw 40
+  set duration-months 72
+  set water-allocation-policy "proportional"
+end
+
+to setup-experiment
+  let chosen-case experiment-case
+  teaching-defaults
+  if member? chosen-case ["recycled-water" "solar" "reforestation" "combined"] [set starting-data-centers 20]
+  if chosen-case = "maximum" [set starting-data-centers 50 set starting-households 50]
+  setup
+  set experiment-case chosen-case
+end
+
+to go-experiment
+  if complete? [stop]
+  if experiment-case = "expansion" and ticks = 12 [repeat 19 [build-more]]
+  if ticks = 24 [
+    if member? experiment-case ["recycled-water" "combined" "maximum"] [enable-solution "Recycled water (50%)"]
+    if member? experiment-case ["solar" "combined" "maximum"] [enable-solution "Solar energy (40%)"]
+    if member? experiment-case ["reforestation" "combined" "maximum"] [enable-solution "Reforestation (12 months)"]
+  ]
+  go
+end]]></code>
+  <widgets>
+    <note x="5" y="5" width="205" height="50" fontSize="17" markdown="false" textColorLight="-1" textColorDark="-1" backgroundLight="-15458772" backgroundDark="-15458772">STS / SDG 6
+Community simulation · V2</note>
+    <slider x="5" y="65" width="205" height="50" min="1" max="50" step="1" default="1" direction="Horizontal" variable="starting-data-centers" display="starting-data-centers"></slider>
+    <slider x="5" y="120" width="205" height="50" min="1" max="50" step="1" default="10" direction="Horizontal" variable="starting-households" display="starting-households"></slider>
+    <button x="5" y="180" width="205" height="36" disableUntilTicks="false" forever="false" kind="Observer" display="Setup / Reset">setup</button>
+    <button x="5" y="222" width="100" height="36" disableUntilTicks="true" forever="true" kind="Observer" display="Run / Pause">go</button>
+    <button x="111" y="222" width="99" height="36" disableUntilTicks="true" forever="false" kind="Observer" display="Step Month">go</button>
+    <button x="5" y="264" width="205" height="36" disableUntilTicks="true" forever="false" kind="Observer" display="Build More +1">build-more</button>
+    <button x="5" y="306" width="205" height="36" disableUntilTicks="true" forever="false" kind="Observer" display="Statistics">show-statistics</button>
+    <button x="5" y="348" width="205" height="36" disableUntilTicks="true" forever="false" kind="Observer" display="Sustainable Solutions">choose-solution</button>
+    <note x="5" y="390" width="205" height="70" fontSize="14" markdown="false" textColorLight="-1" textColorDark="-1" backgroundLight="-15458772" backgroundDark="-15458772">Apply counts with Setup.
+Reset clears history and
+turns solutions OFF.</note>
+    <view x="220" y="5" width="1004" height="460" minPxcor="0" maxPxcor="124" minPycor="0" maxPycor="56" patchSize="8.0" wrappingAllowedX="false" wrappingAllowedY="false" frameRate="10.0" updateMode="1" showTickCounter="false" tickCounterLabel="months" fontSize="16"></view>
+    <monitor x="5" y="472" width="300" height="50" precision="2" fontSize="14" display="Water supply · reservoir %">water-supply-percent</monitor>
+    <monitor x="311" y="472" width="300" height="50" precision="2" fontSize="14" display="Grid demand · capacity %">grid-demand-percent</monitor>
+    <monitor x="617" y="472" width="300" height="50" precision="2" fontSize="14" display="Green coverage · baseline %">green-coverage-percent</monitor>
+    <monitor x="923" y="472" width="300" height="50" precision="1" fontSize="14" display="Illustrative well-being / 100">word precision wellbeing-score 1 (word " · " condition-for wellbeing-score)</monitor>
+    <plot x="5" y="530" width="400" height="195" xMin="0" xMax="6" yMin="0" yMax="100" autoPlotX="true" autoPlotY="false" legend="false" xAxis="Elapsed years (12 months)" yAxis="Reservoir %" display="Water Supply">
+      <setup></setup><update>plotxy (ticks / 12) water-supply-percent</update>
+      <pen interval="1" mode="0" display="Water stock" color="-14785356" legend="true"><setup></setup><update></update></pen>
+    </plot>
+    <plot x="415" y="530" width="400" height="195" xMin="0" xMax="6" yMin="0" yMax="110" autoPlotX="true" autoPlotY="true" legend="true" xAxis="Elapsed years (12 months)" yAxis="Grid %" display="Grid Demand">
+      <setup></setup><update>set-current-plot-pen "Demand"
+plotxy (ticks / 12) grid-demand-percent
+set-current-plot-pen "Capacity"
+plotxy (ticks / 12) 100</update>
+      <pen interval="1" mode="0" display="Demand" color="-4950252" legend="true"><setup></setup><update></update></pen>
+      <pen interval="1" mode="0" display="Capacity" color="-7500403" legend="true"><setup></setup><update></update></pen>
+    </plot>
+    <plot x="825" y="530" width="399" height="195" xMin="0" xMax="6" yMin="0" yMax="100" autoPlotX="true" autoPlotY="false" legend="false" xAxis="Elapsed years (12 months)" yAxis="Vegetation %" display="Green Coverage">
+      <setup></setup><update>plotxy (ticks / 12) green-coverage-percent</update>
+      <pen interval="1" mode="0" display="Vegetation" color="-14777786" legend="true"><setup></setup><update></update></pen>
+    </plot>
+    <note x="5" y="735" width="1219" height="50" fontSize="16" markdown="false" textColorLight="-1" textColorDark="-1" backgroundLight="-15458772" backgroundDark="-15458772">ADVANCED ASSUMPTIONS — illustrative defaults; apply all edits with Setup / Reset.
+Score = 40% water stock + 30% grid headroom + 30% green coverage. Healthy ≥75; Moderate ≥50; Stressed ≥25; Critical below 25.</note>
+    <slider x="5" y="795" width="400" height="50" min="0" max="10" step="0.1" default="1" direction="Horizontal" variable="facility-capacity-mw" display="facility-capacity-mw" units="MW"></slider>
+    <slider x="415" y="795" width="400" height="50" min="0" max="100" step="1" default="70" direction="Horizontal" variable="utilization-percent" display="utilization-percent" units="%"></slider>
+    <slider x="825" y="795" width="399" height="50" min="1" max="3" step="0.1" default="1.6" direction="Horizontal" variable="pue" display="pue"></slider>
+    <slider x="5" y="855" width="400" height="50" min="0" max="5" step="0.1" default="1" direction="Horizontal" variable="wue-l-per-kwh" display="wue-l-per-kwh" units="L/IT kWh"></slider>
+    <slider x="415" y="855" width="400" height="50" min="0" max="2000" step="50" default="500" direction="Horizontal" variable="household-liters-day" display="household-liters-day" units="L/day"></slider>
+    <slider x="825" y="855" width="399" height="50" min="0" max="10" step="0.1" default="2" direction="Horizontal" variable="household-kw" display="household-kw" units="kW/home"></slider>
+    <slider x="5" y="915" width="400" height="50" min="1" max="200" step="1" default="40" direction="Horizontal" variable="reservoir-capacity-ml" display="reservoir-capacity-ml" units="ML"></slider>
+    <slider x="415" y="915" width="400" height="50" min="0" max="40" step="0.5" default="8" direction="Horizontal" variable="recharge-ml-month" display="recharge-ml-month" units="ML/month"></slider>
+    <slider x="825" y="915" width="399" height="50" min="1" max="200" step="1" default="40" direction="Horizontal" variable="grid-capacity-mw" display="grid-capacity-mw" units="MW"></slider>
+    <chooser x="5" y="975" width="400" height="60" variable="water-allocation-policy" current="0" display="water-allocation-policy"><choice type="string" value="proportional"></choice><choice type="string" value="community-first"></choice><choice type="string" value="data-center-first"></choice></chooser>
+    <slider x="415" y="975" width="400" height="50" min="12" max="240" step="12" default="72" direction="Horizontal" variable="duration-months" display="duration-months" units="months"></slider>
+    <monitor x="825" y="975" width="399" height="60" precision="0" fontSize="14" display="Settings">ifelse-value (selected-settings = applied-settings) ["Applied"] ["Changed — apply with Setup"]</monitor>
+    <note x="5" y="1045" width="1219" height="75" fontSize="16" markdown="false" textColorLight="-1" textColorDark="-1" backgroundLight="-15458772" backgroundDark="-15458772">Recycled water replaces 50% of facility freshwater. Solar supplies 40% of facility electricity.
+Reforestation restores eligible cleared ground over 12 months, never beneath buildings. Recovery is not guaranteed.
+Hypothetical teaching assumptions; no actual PAX Silica forecast. Artwork: Icons8 Fluency — https://icons8.com (see Info).</note>
+  </widgets>
+  <info><![CDATA[## AI DATA CENTER COMMUNITY SIMULATION — V2
+
+A hypothetical, neutral STS classroom model with SDG 6 as its primary focus. No default is a measurement or forecast of actual PAX Silica infrastructure. Add the group members' names before submission.
+
+## HOW TO USE
+
+Select starting counts (1–50 each), then Setup / Reset. One visible house represents one household. Build More +1 adds one facility, capped at 50. Run / Pause advances months; Step Month advances exactly one 30-day month. Statistics opens a numerical summary. Sustainable Solutions enables one intervention at a time. Repeating it never stacks benefits. Setup clears history and interventions. Starting counts and all advanced assumptions are applied only at Setup.
+
+Charts show elapsed years, with 12 months per year, from actual monthly outputs. The default run ends at 72 months and freezes until Setup. At 1366 × 768 hide the Command Center via Tabs → Command Center; scroll vertically for plots and assumptions. At 1920 × 1080 plots fit below the main scene. The native layout has a fixed width.
+
+## EQUATIONS AND UNITS
+
+IT energy = facilities × IT capacity (MW) × utilization × 720,000 kWh/month.
+Site water = IT energy × WUE (L/IT kWh) / 1,000,000 ML.
+Facility freshwater request = site water × (1 − reuse share).
+Household request = households × liters/day × 30 / 1,000,000 ML.
+Grid demand % = 100 × (facilities × IT capacity × utilization × PUE × (1 − solar share) + households × kW/1000) / grid capacity MW.
+ML = million liters. PUE changes electricity; it does not enter the WUE equation.
+
+The reservoir recharges before allocation, spilling any water above capacity. Allocation is proportional, community-first, or data-center-first. Available water cannot be negative. Unmet water demand is recorded without adding an invented shutdown mechanism. Grid demand can exceed 100%; that indicates modeled demand above capacity, not simulated blackouts.
+
+## LAND, ARTWORK AND RECOVERY
+
+Separate 50-entry slot lists location homes and facilities independently of turtle IDs. The river, roads, homes, and indicator sidebar are protected. Each facility occupies 3 × 3 patches and clears vegetation in its 5 × 5 construction area. Baseline vegetation is recorded after homes are placed and before facilities are built. Green coverage is current vegetation / baseline. Reforestation adds 1/12 of baseline vegetation per month on cleared, unoccupied eligible patches. New construction restarts recovery on its own cleared area. Trees appear as vegetation regrows; wildlife is a habitat illustration, not a population model. The river's changing width illustrates reservoir stock; its entire original channel remains protected.
+
+## ILLUSTRATIVE WELL-BEING
+
+Score = 0.40 × water stock % + 0.30 × max(0, 100 − grid demand %) + 0.30 × green coverage %.
+Healthy ≥75; Moderate ≥50 and <75; Stressed ≥25 and <50; Critical <25.
+Weights and thresholds are teaching choices, not measured human health. High starting counts do not force a Healthy label. Allocation outcomes are reported separately; this score is not a measure of fairness.
+
+## INTERVENTIONS AND LIMITS
+
+Recycled water substitutes 50% of facility site water. Solar supplies 40% of facility electricity, with no direct water effect. Reforestation affects vegetation, with no change to recharge. Building and enabling solutions update prospective requests and indicators immediately, without withdrawing another month's water or recording a fake chart point. Last-month balances remain historical. No guaranteed recovery. Excludes CO₂, pollution, waste heat, e-waste, disease, jobs, costs, independent population health, and detailed hydrology.
+
+## CREDITS AND REFERENCES
+
+Artwork: [Icons8](https://icons8.com), Fluency family: Cottage, Server, Deciduous Tree, Deer, Recycling, Solar Panel. PNG assets are cached locally for offline classroom use as part of this model, not a standalone icon pack. [Attribution guidance](https://icons8.com/license).
+
+[NetLogo 7.0.4 Bitmap extension](https://docs.netlogo.org/7.0.4/bitmap.html) is bundled with NetLogo.
+[U.S. DOE FEMP: Cooling Water Efficiency Opportunities](https://www.energy.gov/cmei/femp/cooling-water-efficiency-opportunities-federal-data-centers) supplies metric background; all numerical defaults here are illustrative.
+
+Legacy model, tests and results are preserved separately. V2 intentionally changes the scope and must not be presented as numerically equivalent to V1.]]></info>
+  <turtleShapes><shape name="default" rotatable="true" editableColorIndex="0"><polygon color="-1920102913" filled="true" marked="true"><point x="150" y="5"></point><point x="40" y="250"></point><point x="150" y="205"></point><point x="260" y="250"></point></polygon></shape></turtleShapes>
+  <linkShapes></linkShapes>
+  <previewCommands>setup</previewCommands>
+  <experiments>
+    <experiment name="v2-scenarios" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="true" timeLimit="72">
+      <setup>setup-experiment</setup><go>go-experiment</go><exitCondition>complete?</exitCondition>
+      <metrics>
+        <metric>ticks</metric><metric>count data-centers</metric><metric>count households</metric>
+        <metric>reservoir-ml</metric><metric>water-supply-percent</metric><metric>dc-request-ml</metric>
+        <metric>household-request-ml</metric><metric>shortfall-ml</metric><metric>grid-demand-percent</metric>
+        <metric>green-coverage-percent</metric><metric>wellbeing-score</metric><metric>condition-for wellbeing-score</metric>
+        <metric>balance-error-ml</metric>
+      </metrics>
+      <constants></constants>
+      <subExperiments><subExperiment><enumeratedValueSet variable="experiment-case">
+        <value value="&quot;baseline&quot;"></value><value value="&quot;expansion&quot;"></value>
+        <value value="&quot;recycled-water&quot;"></value><value value="&quot;solar&quot;"></value>
+        <value value="&quot;reforestation&quot;"></value><value value="&quot;combined&quot;"></value>
+        <value value="&quot;maximum&quot;"></value>
+      </enumeratedValueSet></subExperiment></subExperiments>
+    </experiment>
+  </experiments>
+</model>

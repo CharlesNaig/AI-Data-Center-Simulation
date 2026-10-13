@@ -1,4 +1,5 @@
 .tools/
 graphify-out/
 results/*.csv
+results/*.png
 !results/.gitkeep

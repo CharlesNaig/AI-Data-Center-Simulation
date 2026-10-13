@@ -1,0 +1,130 @@
+[
+  {
+    "path": ".gitignore",
+    "sha256": "c97ed912517dd9bb38fb78e425935ea49e8a54773ed8b3b72911160eb6274d31"
+  },
+  {
+    "path": "assets/cottage.png",
+    "sha256": "35b254a9b3a218f0468e55efa2c261e5eb3004ba3e46527eca94725ebd172e58"
+  },
+  {
+    "path": "assets/CREDITS.md",
+    "sha256": "d7cbc6952adf1a5859c8a1ca9e4adc9d4fc417a6a43bb6b67a998fe2441fecb7"
+  },
+  {
+    "path": "assets/deciduous-tree.png",
+    "sha256": "67db3acb40636627c417feb279f4ae2ce6b846fa9567d14432a35f6de1b8ff0d"
+  },
+  {
+    "path": "assets/deer.png",
+    "sha256": "1d3793f09b3714ce31b9724a06680039d2ff783207a574e08d5c1ea02068af42"
+  },
+  {
+    "path": "assets/recycling.png",
+    "sha256": "f7ac8f2b90b31b2543bf3ec901df5c1b04f571cd5f936fb04a6cc8dcfade1685"
+  },
+  {
+    "path": "assets/server.png",
+    "sha256": "c29278ccdba52c4bd13c5069f0a5ffd5c858d6b650de1b91cb9bed10132f2b84"
+  },
+  {
+    "path": "assets/solar-panel.png",
+    "sha256": "5a8119f1a1db9d8b41f80dee4665bae4da3469707179105e1e68b617b3aaf5e8"
+  },
+  {
+    "path": "docs/scenario-summary.csv",
+    "sha256": "e10d832563854fad9911952a849546154c2bdf90d25520b11c3d552877818c79"
+  },
+  {
+    "path": "docs/screenshots/charts-1366x768.png",
+    "sha256": "2d5427504d208fd1dfb46e2af5f4d32d73e3fcc80bae023907ddd6c428111a53"
+  },
+  {
+    "path": "docs/screenshots/completion-1366x768.png",
+    "sha256": "7d40e18aa2d3e995b82efe3f9559f0b765287bdda047fc73ac0ff7c310d585ff"
+  },
+  {
+    "path": "docs/screenshots/completion-1920x1080.png",
+    "sha256": "3806a1feb72b6d58c07f7347dc83d951d7844bc22d37b64db969464fa4a7c1a2"
+  },
+  {
+    "path": "docs/screenshots/maximum-1366x768.png",
+    "sha256": "adde0f96aabddeeb85864453ce5892c92a6a826d3be70d0355ab56d49f9e91aa"
+  },
+  {
+    "path": "docs/screenshots/maximum-1920x1080.png",
+    "sha256": "61d030d91fbc8f35e993b1f569219b6d0d916293ce379b034329aeeabe0f3dbe"
+  },
+  {
+    "path": "docs/screenshots/maximum-charts-1366x768.png",
+    "sha256": "37ece639c7e9efaa4b35560419248cf7d91c1068b87f508e67fbacf60999df48"
+  },
+  {
+    "path": "docs/screenshots/recovery-1366x768.png",
+    "sha256": "c11c345d879230a2071b5dba05d329f3895e87315041a9766c803a7245fcc307"
+  },
+  {
+    "path": "docs/screenshots/recovery-1920x1080.png",
+    "sha256": "73a088143a667b8fc72975122c3a4658d42bd47dc1ad1e0ca93235b33dceac48"
+  },
+  {
+    "path": "docs/screenshots/setup-1366x768.png",
+    "sha256": "99f0c144913b074ce618e0f84d81efdf9c023fa903d0c197b04f6745865c7c8d"
+  },
+  {
+    "path": "docs/screenshots/setup-1920x1080.png",
+    "sha256": "4d62b461cde0ef677153bb497ecf0f1dc382544812bb250d52cc4057a396d12d"
+  },
+  {
+    "path": "docs/screenshots/shortage-1366x768.png",
+    "sha256": "d0c7e0b6687a3566d16a42cd6490f28d6c1adb5cfc3cd399e89f0885defde551"
+  },
+  {
+    "path": "docs/screenshots/shortage-1920x1080.png",
+    "sha256": "11af8891e5f7f680fce527db3f02d1005cb1622aee6d282b5614f86d5fc543d9"
+  },
+  {
+    "path": "docs/screenshots/shortage-grayscale-1366x768.png",
+    "sha256": "6db81470329a31e1487c2d49551e217752180ab103d613eb0965cb76c98f8c9c"
+  },
+  {
+    "path": "docs/screenshots/solutions-dialog.png",
+    "sha256": "8bc00f65fbc1515b58e83761516de6a7676bc689af4391328bc6b06a6b096575"
+  },
+  {
+    "path": "docs/screenshots/statistics-dialog.png",
+    "sha256": "d3562a306c0952dbc1e8efa44d301954118a16468c2deaf5977641767416285d"
+  },
+  {
+    "path": "docs/verification-results.json",
+    "sha256": "a55d1f637b0534edf38d9d54e35599d162c3df06abd1350bd5c53957006e6c27"
+  },
+  {
+    "path": "docs/verification.md",
+    "sha256": "6528564acaceb368ad1346cb52117ca57dcabe13d31baabf10d4499656ee152e"
+  },
+  {
+    "path": "models/ai-data-center-community-v2.nlogox",
+    "sha256": "dabbfe924d7ceafd908c7b6a9707adf2edd7f3d085d17379f8653c9a60b961b4"
+  },
+  {
+    "path": "README.md",
+    "sha256": "baa24260d00662faea6c18b5ea19878c5e9769bedcc437969397897bdd3b0eaa"
+  },
+  {
+    "path": "tests/CheckApp.java",
+    "sha256": "96a2af55b6e202562c4cfa0abbacc511cb0dfd50fa52551737db9ab708a4dd97"
+  },
+  {
+    "path": "tests/CheckModel.java",
+    "sha256": "39f42f6d176ad8d4d12eddff908f99cb1d1ef43e1e1ee10ff76aa912d8bfbe52"
+  },
+  {
+    "path": "tests/CheckOffline.java",
+    "sha256": "7c5d1dfe8606e5e280dd5aa5b456d328fd2192d5d483ae5236524ccf3e51322e"
+  },
+  {
+    "path": "tests/verify.py",
+    "sha256": "7e54153792013abf56a1fe0bd912b92e084cca256fcccd31230e6601d14da01e"
+  }
+]

@@ -65,18 +65,19 @@ to setup
     set capacity-ml reservoir-capacity-ml
     set stored-water-ml reservoir-capacity-ml
     set recharge-ml-this-month 0
-    set label "shared water"
+    set label ""
+    hide-turtle
   ]
 
   create-communities 1 [
-    setxy -10 -2
+    setxy -11 -4
     set shape "house"
     set size 4
-    set color green
+    set color [0 121 107]
     set freshwater-request-ml 0
     set freshwater-supplied-ml 0
     set service-percent 100
-    set label "community"
+    set label ""
   ]
 
   create-data-centers (min (list initial-data-centers maximum-data-centers)) [
@@ -115,17 +116,19 @@ end
 
 to paint-world
   ask patches [
-    ifelse pycor > 6
-      [ set pcolor 95 ]
-      [ ifelse pxcor < -4 [ set pcolor 57 ] [ set pcolor 9.5 ] ]
+    set pcolor [248 250 252]
+    set plabel-color [15 23 42]
   ]
 end
 
 to initialize-data-center
+  ;; Retain the original two random draws; schematic placement must not change runs.
   setxy (5 + random-float 9) (-8 + random-float 11)
-  set shape "square"
-  set size 2.5
-  set color cyan
+  let position-index who - 2
+  setxy (-3.5 + 3.4 * (position-index mod 6)) (-2.2 - 2 * floor (position-index / 6))
+  set shape "server-building"
+  set size 1.05
+  set color [109 40 217]
   set it-capacity-mw facility-capacity-mw
   set it-load-mw 0
   set it-energy-kwh-month 0
@@ -134,7 +137,7 @@ to initialize-data-center
   set freshwater-request-ml 0
   set freshwater-supplied-ml 0
   set water-service-percent 100
-  set label (word "DC " who)
+  set label ""
 end
 
 to reset-monthly-totals
@@ -283,18 +286,85 @@ to allocate-shared-water
 end
 
 to update-visuals
+  ;; Keep the original asks/one-of outside the isolated decorative work.
   if any? water-sources [
     ask one-of water-sources [
-      set color scale-color blue stored-water-ml 0 capacity-ml
-      set label (word (precision stored-water-ml 0) " ML")
+      set color [0 114 178]
     ]
   ]
   ask communities [
-    set color ifelse-value (service-percent >= 99.999) [green] [orange]
+    set color [0 121 107]
   ]
   ask data-centers [
-    set color ifelse-value (water-service-percent >= 99.999) [cyan] [violet]
+    set color [109 40 217]
   ]
+  ;; All extra asks/reporters/drawing use a saved RNG state. No decorative agents.
+  with-local-randomness [
+    clear-drawing
+    ask patches [ set plabel "" ]
+    ask patch 5 12 [ set plabel "SHARED RESERVOIR" ]
+    ask patch -7 1 [ set plabel "COMMUNITY" set plabel-color [0 121 107] ]
+    ask patch 12 1 [ set plabel "DATA CENTERS" set plabel-color [109 40 217] ]
+    ask patch -3 5 [ set plabel "Freshwater supply" ]
+    ask patch 9 5 [ set plabel "Freshwater supply" ]
+    ask patch -8 -8 [ set plabel "One community" ]
+    ask patch -8 -9 [ set plabel "(aggregate)" ]
+    if months-elapsed > 0 and community-service-percent < 99.999 [
+      ask patch -8 -7 [ set plabel "Water shortfall" set plabel-color [180 83 9] ]
+    ]
+    if months-elapsed > 0 and data-center-water-service-percent < 99.999 [
+      ask patch 12 0 [ set plabel "Water shortfall" set plabel-color [180 83 9] ]
+    ]
+    ask data-centers [
+      let caption word "DC " (who - 1)
+      ask patch (round (xcor + 0.3)) (floor (ycor - 0.5)) [ set plabel caption ]
+    ]
+    ask one-of water-sources [
+      let fullness max (list 0 (min (list 1 (stored-water-ml / capacity-ml))))
+      ask patch 4 7 [ set plabel (word precision (fullness * 100) 1 "% full") ]
+      ;; One-pixel horizontal strokes make the filled height proportional, even near 0%.
+      set color [0 114 178]
+      set pen-size 1
+      let fill-y 8
+      while [fill-y < 8 + 3 * fullness] [
+        pen-up setxy -6 fill-y pen-down setxy 6 fill-y
+        set fill-y fill-y + 1 / 18
+      ]
+      set color [15 23 42]
+      draw-outline -6 8 6 11
+      set color [0 114 178]
+      draw-supply-arrow -6 -11
+      draw-supply-arrow 6 10
+      set color ifelse-value (months-elapsed > 0 and community-service-percent < 99.999)
+        [[180 83 9]] [[15 23 42]]
+      draw-outline -15 -10.9 -7 -1.5
+      set color ifelse-value (months-elapsed > 0 and data-center-water-service-percent < 99.999)
+        [[180 83 9]] [[15 23 42]]
+      draw-outline -5 -12 15.5 -1.5
+      pen-up setxy 0 10
+      set color [0 114 178]
+    ]
+  ]
+end
+
+to draw-outline [box-left box-bottom box-right box-top]
+  set pen-size 2
+  pen-up setxy box-left box-bottom pen-down
+  setxy box-right box-bottom setxy box-right box-top setxy box-left box-top setxy box-left box-bottom
+  pen-up
+end
+
+to draw-supply-arrow [start-x end-x]
+  set pen-size 2
+  pen-up setxy start-x 9.5 pen-down setxy end-x 9.5 setxy end-x 2.5
+  pen-up setxy (end-x - 0.4) 3.2 pen-down setxy end-x 2.5 setxy (end-x + 0.4) 3.2
+  pen-up
+end
+
+to-report water-service-display [percentage]
+  if months-elapsed = 0 [ report "Ready—advance one month" ]
+  report (word (ifelse-value (percentage >= 99.999) ["Demand met"] ["Water shortfall"])
+    " | " precision percentage 3 "%")
 end
 
 to check-invariants
@@ -456,59 +526,60 @@ to run-self-tests
   print "SELF-TESTS PASSED"
 end]]></code>
   <widgets>
-    <button x="5" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="105" display="load-scenario">load-scenario</button>
-    <button x="115" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="75">setup</button>
-    <button x="195" y="10" height="40" disableUntilTicks="true" forever="true" kind="Observer" width="70">go</button>
-    <button x="270" y="10" height="40" disableUntilTicks="true" forever="false" kind="Observer" width="85" display="go-once">go</button>
-    <button x="360" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="125">run-self-tests</button>
+    <button x="265" y="5" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="140" display="1 Load preset">load-scenario</button>
+    <button display="2 Reset" x="415" y="5" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="110">setup</button>
+    <button display="Run / Pause" x="535" y="5" height="40" disableUntilTicks="true" forever="true" kind="Observer" width="145">go</button>
+    <button x="690" y="5" height="40" disableUntilTicks="true" forever="false" kind="Observer" width="135" display="Step month">go</button>
+    <button display="Run self-tests" x="660" y="675" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="160">run-self-tests</button>
 
-    <chooser x="5" y="58" height="60" variable="scenario" current="0" width="235" display="scenario">
+    <chooser x="5" y="0" height="50" variable="scenario" current="0" width="245" display="Scenario">
       <choice type="string" value="Reference baseline"></choice>
       <choice type="string" value="Rapid growth + drought"></choice>
       <choice type="string" value="Efficiency + reuse"></choice>
     </chooser>
-    <chooser x="250" y="58" height="60" variable="water-allocation-policy" current="0" width="235" display="water-allocation-policy">
+    <chooser x="5" y="670" height="60" variable="water-allocation-policy" current="0" width="315" display="water-allocation-policy">
       <choice type="string" value="proportional"></choice>
       <choice type="string" value="community-first"></choice>
       <choice type="string" value="data-center-first"></choice>
     </chooser>
 
-    <slider x="5" y="125" width="235" height="50" min="1" max="10" step="1" default="1" direction="Horizontal" variable="initial-data-centers" display="initial-data-centers"></slider>
-    <slider x="5" y="177" width="235" height="50" min="10" max="200" step="10" default="50" direction="Horizontal" variable="facility-capacity-mw" display="facility-capacity-mw" units="MW"></slider>
-    <slider x="5" y="229" width="235" height="50" min="10" max="100" step="5" default="70" direction="Horizontal" variable="initial-utilization-percent" display="initial-utilization-percent" units="%"></slider>
-    <slider x="5" y="281" width="235" height="50" min="0" max="60" step="1" default="15" direction="Horizontal" variable="annual-ai-demand-growth-percent" display="annual-ai-demand-growth-percent" units="%/year"></slider>
-    <slider x="5" y="333" width="235" height="50" min="1" max="30" step="1" default="20" direction="Horizontal" variable="maximum-data-centers" display="maximum-data-centers"></slider>
-    <slider x="5" y="385" width="235" height="50" min="1" max="3" step="0.05" default="1.6" direction="Horizontal" variable="pue" display="pue"></slider>
-    <slider x="5" y="437" width="235" height="50" min="0" max="5" step="0.1" default="1" direction="Horizontal" variable="wue-liters-per-kwh" display="wue-liters-per-kwh" units="L/kWh"></slider>
-    <slider x="5" y="489" width="235" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="reclaimed-water-percent" display="reclaimed-water-percent" units="%"></slider>
+    <slider x="5" y="740" width="320" height="50" min="1" max="10" step="1" default="1" direction="Horizontal" variable="initial-data-centers" display="initial-data-centers"></slider>
+    <slider x="340" y="740" width="320" height="50" min="10" max="200" step="10" default="50" direction="Horizontal" variable="facility-capacity-mw" display="facility-capacity-mw" units="MW"></slider>
+    <slider x="675" y="740" width="320" height="50" min="10" max="100" step="5" default="70" direction="Horizontal" variable="initial-utilization-percent" display="initial-utilization-percent" units="%"></slider>
+    <slider x="5" y="796" width="320" height="50" min="0" max="60" step="1" default="15" direction="Horizontal" variable="annual-ai-demand-growth-percent" display="annual-ai-demand-growth-percent" units="%/year"></slider>
+    <slider x="340" y="796" width="320" height="50" min="1" max="30" step="1" default="20" direction="Horizontal" variable="maximum-data-centers" display="maximum-data-centers"></slider>
+    <slider x="675" y="796" width="320" height="50" min="1" max="3" step="0.05" default="1.6" direction="Horizontal" variable="pue" display="pue"></slider>
+    <slider x="5" y="852" width="320" height="50" min="0" max="5" step="0.1" default="1" direction="Horizontal" variable="wue-liters-per-kwh" display="wue-liters-per-kwh" units="L/kWh"></slider>
+    <slider x="340" y="852" width="320" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="reclaimed-water-percent" display="reclaimed-water-percent" units="%"></slider>
 
-    <slider x="250" y="125" width="235" height="50" min="0" max="100" step="5" default="25" direction="Horizontal" variable="renewable-electricity-percent" display="renewable-electricity-percent" units="%"></slider>
-    <slider x="250" y="177" width="235" height="50" min="0" max="1.5" step="0.05" default="0.5" direction="Horizontal" variable="grid-emissions-kg-per-kwh" display="grid-emissions-kg-per-kwh" units="kg/kWh"></slider>
-    <slider x="250" y="229" width="235" height="50" min="100" max="10000" step="100" default="2400" direction="Horizontal" variable="reservoir-capacity-ml" display="reservoir-capacity-ml" units="ML"></slider>
-    <slider x="250" y="281" width="235" height="50" min="0" max="2000" step="50" default="650" direction="Horizontal" variable="base-monthly-recharge-ml" display="base-monthly-recharge-ml" units="ML/month"></slider>
-    <slider x="250" y="333" width="235" height="50" min="0" max="100" step="1" default="10" direction="Horizontal" variable="community-demand-ml-per-day" display="community-demand-ml-per-day" units="ML/day"></slider>
-    <slider x="250" y="385" width="235" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="drought-severity-percent" display="drought-severity-percent" units="%"></slider>
-    <slider x="250" y="437" width="235" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="rainfall-variability-percent" display="rainfall-variability-percent" units="%"></slider>
-    <slider x="250" y="489" width="235" height="50" min="1" max="30" step="1" default="10" direction="Horizontal" variable="simulation-years" display="simulation-years" units="years"></slider>
-    <slider x="250" y="541" width="235" height="50" min="1" max="10000" step="1" default="42" direction="Horizontal" variable="seed-value" display="seed-value"></slider>
+    <slider x="675" y="852" width="320" height="50" min="0" max="100" step="5" default="25" direction="Horizontal" variable="renewable-electricity-percent" display="renewable-electricity-percent" units="%"></slider>
+    <slider x="5" y="908" width="320" height="50" min="0" max="1.5" step="0.05" default="0.5" direction="Horizontal" variable="grid-emissions-kg-per-kwh" display="grid-emissions-kg-per-kwh" units="kg/kWh"></slider>
+    <slider x="340" y="908" width="320" height="50" min="100" max="10000" step="100" default="2400" direction="Horizontal" variable="reservoir-capacity-ml" display="reservoir-capacity-ml" units="ML"></slider>
+    <slider x="675" y="908" width="320" height="50" min="0" max="2000" step="50" default="650" direction="Horizontal" variable="base-monthly-recharge-ml" display="base-monthly-recharge-ml" units="ML/month"></slider>
+    <slider x="5" y="964" width="320" height="50" min="0" max="100" step="1" default="10" direction="Horizontal" variable="community-demand-ml-per-day" display="community-demand-ml-per-day" units="ML/day"></slider>
+    <slider x="340" y="964" width="320" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="drought-severity-percent" display="drought-severity-percent" units="%"></slider>
+    <slider x="675" y="964" width="320" height="50" min="0" max="100" step="5" default="0" direction="Horizontal" variable="rainfall-variability-percent" display="rainfall-variability-percent" units="%"></slider>
+    <slider x="5" y="1020" width="320" height="50" min="1" max="30" step="1" default="10" direction="Horizontal" variable="simulation-years" display="simulation-years" units="years"></slider>
+    <slider x="340" y="1020" width="320" height="50" min="1" max="10000" step="1" default="42" direction="Horizontal" variable="seed-value" display="seed-value"></slider>
 
-    <note x="5" y="548" width="235" height="72" fontSize="11" markdown="true" textColorLight="-16777216" textColorDark="-1" backgroundLight="0" backgroundDark="0">**Evidence boundary:** scenario values are illustrative. This is not a forecast or digital twin of PAX Silica.</note>
+    <note x="335" y="670" width="315" height="65" fontSize="14" markdown="true" textColorLight="-15788246" textColorDark="-15788246" backgroundLight="-460036" backgroundDark="-460036">**Illustrative scenarios only.**
+Not a PAX Silica forecast or digital twin.</note>
 
-    <view x="500" y="10" width="490" height="370" minPxcor="-16" maxPxcor="16" minPycor="-12" maxPycor="12" patchSize="14.0" wrappingAllowedX="false" wrappingAllowedY="false" frameRate="30.0" updateMode="1" showTickCounter="true" tickCounterLabel="months" fontSize="11"></view>
+    <view x="5" y="85" width="598" height="454" minPxcor="-16" maxPxcor="16" minPycor="-12" maxPycor="12" patchSize="18.0" wrappingAllowedX="false" wrappingAllowedY="false" frameRate="30.0" updateMode="1" showTickCounter="true" tickCounterLabel="months" fontSize="16"></view>
 
-    <monitor x="1005" y="10" width="150" height="55" precision="0" fontSize="11" display="months elapsed">months-elapsed</monitor>
-    <monitor x="1165" y="10" width="150" height="55" precision="0" fontSize="11" display="data centers">count data-centers</monitor>
-    <monitor x="1005" y="70" width="150" height="55" precision="2" fontSize="11" display="IT load (MW)">total-it-load-mw</monitor>
-    <monitor x="1165" y="70" width="150" height="55" precision="2" fontSize="11" display="unserved compute (MW)">unserved-compute-demand-mw</monitor>
-    <monitor x="1005" y="130" width="150" height="55" precision="2" fontSize="11" display="reservoir (ML)">reservoir-stock-ml</monitor>
-    <monitor x="1165" y="130" width="150" height="55" precision="1" fontSize="11" display="reservoir (%)">reservoir-percent</monitor>
-    <monitor x="1005" y="190" width="150" height="55" precision="2" fontSize="11" display="DC freshwater request (ML)">data-center-freshwater-request-ml</monitor>
-    <monitor x="1165" y="190" width="150" height="55" precision="1" fontSize="11" display="community service (%)">community-service-percent</monitor>
-    <monitor x="1005" y="250" width="150" height="55" precision="1" fontSize="11" display="DC water service (%)">data-center-water-service-percent</monitor>
-    <monitor x="1165" y="250" width="150" height="55" precision="1" fontSize="11" display="emissions (t/month)">monthly-emissions-tonnes</monitor>
-    <monitor x="1005" y="310" width="310" height="55" precision="1" fontSize="11" display="cumulative operational emissions (t)">cumulative-emissions-tonnes</monitor>
+    <monitor x="620" y="85" width="180" height="55" precision="0" fontSize="16" display="Month">months-elapsed</monitor>
+    <monitor x="810" y="85" width="185" height="55" precision="0" fontSize="16" display="Data centers">count data-centers</monitor>
+    <monitor x="5" y="1090" width="240" height="55" precision="2" fontSize="14" display="IT load (MW)">total-it-load-mw</monitor>
+    <monitor x="255" y="1090" width="240" height="55" precision="2" fontSize="14" display="Unserved compute (MW)">unserved-compute-demand-mw</monitor>
+    <monitor x="620" y="155" width="180" height="55" precision="2" fontSize="16" display="Reservoir (ML)">precision reservoir-stock-ml 2</monitor>
+    <monitor x="810" y="155" width="185" height="55" precision="1" fontSize="16" display="Reservoir (%)">precision reservoir-percent 1</monitor>
+    <monitor x="505" y="1090" width="240" height="55" precision="2" fontSize="14" display="DC freshwater request (ML)">data-center-freshwater-request-ml</monitor>
+    <monitor x="620" y="215" width="375" height="70" precision="1" fontSize="16" display="Community water demand">water-service-display community-service-percent</monitor>
+    <monitor x="620" y="295" width="375" height="70" precision="1" fontSize="16" display="Data-center water demand">water-service-display data-center-water-service-percent</monitor>
+    <monitor x="755" y="1090" width="240" height="55" precision="1" fontSize="14" display="emissions (t/month)">monthly-emissions-tonnes</monitor>
+    <monitor x="5" y="1155" width="495" height="55" precision="1" fontSize="14" display="cumulative operational emissions (t)">cumulative-emissions-tonnes</monitor>
 
-    <plot x="500" y="395" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="2500" autoPlotX="true" autoPlotY="true" legend="true" xAxis="month" yAxis="ML" display="Shared Water">
+    <plot x="5" y="1240" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="2500" autoPlotX="true" autoPlotY="true" legend="true" xAxis="month" yAxis="ML" display="Shared Water">
       <setup></setup>
       <update><![CDATA[set-current-plot "Shared Water"
 set-current-plot-pen "reservoir ML"
@@ -522,7 +593,7 @@ plot data-center-freshwater-request-ml]]></update>
       <pen interval="1" mode="0" display="data-center request ML" color="-2674135" legend="true"><setup></setup><update></update></pen>
     </plot>
 
-    <plot x="825" y="395" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="100" autoPlotX="true" autoPlotY="false" legend="true" xAxis="month" yAxis="service %" display="Service Levels">
+    <plot x="340" y="1240" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="100" autoPlotX="true" autoPlotY="false" legend="true" xAxis="month" yAxis="service %" display="Service Levels">
       <setup></setup>
       <update><![CDATA[set-current-plot "Service Levels"
 set-current-plot-pen "community %"
@@ -533,7 +604,7 @@ plot data-center-water-service-percent]]></update>
       <pen interval="1" mode="0" display="data-center %" color="-8630108" legend="true"><setup></setup><update></update></pen>
     </plot>
 
-    <plot x="1150" y="395" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="100" autoPlotX="true" autoPlotY="true" legend="true" xAxis="month" yAxis="scaled monthly value" display="Energy and Emissions">
+    <plot x="675" y="1240" width="315" height="245" xMin="0" xMax="120" yMin="0" yMax="100" autoPlotX="true" autoPlotY="true" legend="true" xAxis="month" yAxis="scaled monthly value" display="Energy and Emissions">
       <setup></setup>
       <update><![CDATA[set-current-plot "Energy and Emissions"
 set-current-plot-pen "facility GWh/month"
@@ -543,6 +614,13 @@ plot monthly-emissions-tonnes / 1000]]></update>
       <pen interval="1" mode="0" display="facility GWh/month" color="-7500403" legend="true"><setup></setup><update></update></pen>
       <pen interval="1" mode="0" display="emissions kt/month" color="-2674135" legend="true"><setup></setup><update></update></pen>
     </plot>
+    <monitor x="620" y="375" width="375" height="60" precision="2" fontSize="16" display="Monthly water shortfall (ML)">ifelse-value (months-elapsed = 0) ["Ready—advance one month"] [water-shortage-ml]</monitor>
+    <note x="5" y="55" width="995" height="25" fontSize="16" markdown="false" textColorLight="-15788246" textColorDark="-15788246" backgroundLight="-460036" backgroundDark="-460036">Load preset → adjust inputs below → Reset → Run. Loading a preset resets its settings.</note>
+    <note x="620" y="445" width="375" height="95" fontSize="16" markdown="false" textColorLight="-15788246" textColorDark="-15788246" backgroundLight="-460036" backgroundDark="-460036">Share of monthly water demand supplied.
+Demand met: at least 99.999% supplied.
+ML = million liters.</note>
+    <note x="5" y="545" width="995" height="30" fontSize="16" markdown="false" textColorLight="-15788246" textColorDark="-15788246" backgroundLight="-460036" backgroundDark="-460036">Blue: water | Teal: community | Purple: data centers | Amber + Water shortfall: unmet demand | 1 step = 30 days</note>
+    <note x="5" y="625" width="995" height="35" fontSize="16" markdown="false" textColorLight="-15788246" textColorDark="-15788246" backgroundLight="-460036" backgroundDark="-460036">DETAILED SETTINGS — apply input changes with Reset before starting a new comparison</note>
   </widgets>
 
   <info><![CDATA[## WHAT IS IT?
@@ -555,7 +633,9 @@ One tick represents a 30-day month. Compute demand grows, facilities are added w
 
 ## HOW TO USE IT
 
-Choose a scenario, click LOAD-SCENARIO, click SETUP, and click GO. Compare RAPID GROWTH + DROUGHT with EFFICIENCY + REUSE. During a shortage, change only the allocation policy and discuss who benefits, who bears the shortfall, and who should decide.
+Choose a scenario, click 1 LOAD PRESET, adjust inputs if desired, click 2 RESET, then RUN / PAUSE or STEP MONTH. Loading a preset resets its settings. Compare RAPID GROWTH + DROUGHT with EFFICIENCY + REUSE. During a shortage, change only the allocation policy and discuss who benefits, who bears the shortfall, and who should decide.
+
+The View is a schematic, not a map. Blue fill shows reservoir fullness; arrows indicate freshwater supply without adding flow behavior. Teal identifies the aggregate community, purple identifies data centers, and amber outlines plus Water shortfall text indicate unmet demand. Demand met means at least 99.999% supplied. Service percentages show the share of monthly water demand supplied. ML means million liters. Before month 1 the displays say Ready—advance one month; initialized service values are not observed outcomes.
 
 ## THINGS TO NOTICE
 
@@ -594,6 +674,13 @@ Brookings Institution, "The Future of Data Centers."
 Created for a Science, Technology, and Society course project. Model authors must add their group names before submission.]]></info>
 
   <turtleShapes>
+    <shape name="server-building" rotatable="false" editableColorIndex="0">
+      <rectangle startX="35" startY="20" endX="265" endY="280" filled="true" marked="true" color="-1920102913"></rectangle>
+      <rectangle startX="60" startY="50" endX="240" endY="100" filled="true" marked="false" color="-117769217"></rectangle>
+      <rectangle startX="60" startY="125" endX="240" endY="175" filled="true" marked="false" color="-117769217"></rectangle>
+      <rectangle startX="60" startY="200" endX="240" endY="250" filled="true" marked="false" color="-117769217"></rectangle>
+      <line startX="35" startY="20" endX="265" endY="20" marked="false" color="253176575"></line>
+    </shape>
     <shape name="default" rotatable="true" editableColorIndex="0">
       <polygon color="-1920102913" filled="true" marked="true">
         <point x="150" y="5"></point><point x="40" y="250"></point><point x="150" y="205"></point><point x="260" y="250"></point>

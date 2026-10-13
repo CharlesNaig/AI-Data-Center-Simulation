@@ -1,5 +1,9 @@
 # AI Data Center Water-Energy Nexus
 
+**Latest: [V2.2 light pixel-art dashboard](v2.2/README.md)** — open `v2.2/models/ai-data-center-community-v2.2.nlogox` in NetLogo 7.0.4.
+
+**Preserved comparison: [V2.1 natural layout](v2.1/README.md)** — open its model to return to that design without restoring or overwriting files. The original [`v2/`](v2/README.md), this page and V1 model remain preserved.
+
 A neutral, interactive NetLogo scenario model for a Science, Technology, and Society course project. It explores how hypothetical AI data-center growth could interact with freshwater availability, community demand, facility efficiency, water reuse, electricity mix, and operational emissions in a Philippine setting.
 
 This is a teaching model, not a forecast or digital twin of PAX Silica. Except for cited metric definitions, all default values and scenario settings are illustrative.
@@ -44,10 +48,23 @@ Use NetLogo 7.0.4 or a compatible NetLogo 7 release:
 
 1. Open `models/ai-data-center-water-energy.nlogox`.
 2. Choose a scenario.
-3. Click `load-scenario`.
-4. Click `setup`.
-5. Click `go`, or use `go-once` to advance one month.
-6. Use `run-self-tests` at any time to check the resource equations and allocation rules.
+3. Click **1 Load preset** (`load-scenario`). Loading a preset resets its settings.
+4. Adjust inputs below the presentation area if desired, then click **2 Reset** (`setup`).
+5. Click **Run / Pause** (the native forever `go` button), or **Step month** (`go`) to advance one month.
+6. Scroll down to **Run self-tests** (`run-self-tests`) to check the resource equations and allocation rules.
+
+At 1366 × 768, hide the Command Center using **Tabs → Command Center** (or collapse it using the divider) to fit the main presentation without scrolling. Detailed settings, remaining monitors, and the unchanged charts are below it. The display is fixed-size native NetLogo, not a responsive web dashboard.
+
+## Read the Simulation View
+
+- The off-white schematic shows one shared reservoir, one aggregate teal community, and purple server buildings. Facility positions fill a fixed six-column, five-row grid in ID order; these positions are not geographic assumptions.
+- Blue fill height and the numeric percentage show reservoir fullness. Static arrows labeled “Freshwater supply” explain the resource connection; they do not introduce additional modeled flow or animated particles.
+- Sector identity colors stay unchanged during shortages. Amber outlines and explicit **Water shortfall** text identify unmet demand even without distinguishing colors.
+- **Demand met** means at least 99.999% of monthly water demand was supplied, matching the model's existing tolerance. Sector percentages measure the share of monthly demand supplied, not reservoir fullness. Three decimals keep the tolerance boundary interpretable.
+- Before month 1, service and shortfall monitors say **Ready—advance one month**. Initialized service values are not observed results.
+- **ML = million liters**; **1 step = 30 days**. Tiny floating-point reservoir residuals are rounded only in the presentation, not in the equations or experiment results.
+
+Visual work adds no agents: the existing source draws the tank, arrows, and sector outlines; patch labels provide captions. Additional visual work runs inside `with-local-randomness`, while original random placement draws are still consumed before fixed positions are assigned.
 
 For a clear classroom comparison, run `Rapid growth + drought`, then `Efficiency + reuse`. They use the same 30% annual demand growth and 40% drought assumptions, making the modeled efficiency and reuse changes easier to compare.
 
@@ -83,6 +100,16 @@ $netLogoConsole = 'C:\Program Files\NetLogo 7.0.4\NetLogo_Console.exe'
 ```
 
 CSV files in `results/` are intentionally ignored by Git.
+
+UI regression check, after capturing each experiment with `ui-before-` and `ui-after-` filenames:
+
+```powershell
+rtk python tests/verify-ui.py
+```
+
+This compares final outputs by scenario, allocation policy, and seed (absolute tolerance 1e-6, relative tolerance 1e-10), checks unchanged world boundaries, preserves GUI variable bindings, and rejects overlapping widget rectangles.
+
+The [UI verification record](docs/ui-verification.md) includes native application screenshots at both requested window sizes, edge-case checks, contrast ratios, and runnable Java checks. All 37 before/after experiment results remained unchanged in the tested NetLogo 7.0.4 runtime.
 
 ## Verified draft results
 
