@@ -449,55 +449,74 @@ to go-experiment
   go
 end]]></code>
   <widgets>
-    <note x="5" y="5" width="205" height="50" fontSize="17" markdown="false" textColorLight="-1" textColorDark="-1" backgroundLight="-15458772" backgroundDark="-15458772">STS / SDG 6
+    <view x="220" wrappingAllowedX="false" y="5" frameRate="10.0" minPycor="0" height="460" showTickCounter="false" patchSize="8.0" fontSize="16" wrappingAllowedY="false" width="1004" tickCounterLabel="months" maxPycor="56" updateMode="1" maxPxcor="124" minPxcor="0"></view>
+    <note x="5" y="5" backgroundDark="-15458772" fontSize="17" width="205" markdown="false" height="50" textColorDark="-1" textColorLight="-1" backgroundLight="-15458772">STS / SDG 6
 Community simulation · V2</note>
-    <slider x="5" y="65" width="205" height="50" min="1" max="50" step="1" default="1" direction="Horizontal" variable="starting-data-centers" display="starting-data-centers"></slider>
-    <slider x="5" y="120" width="205" height="50" min="1" max="50" step="1" default="10" direction="Horizontal" variable="starting-households" display="starting-households"></slider>
-    <button x="5" y="180" width="205" height="36" disableUntilTicks="false" forever="false" kind="Observer" display="Setup / Reset">setup</button>
-    <button x="5" y="222" width="100" height="36" disableUntilTicks="true" forever="true" kind="Observer" display="Run / Pause">go</button>
-    <button x="111" y="222" width="99" height="36" disableUntilTicks="true" forever="false" kind="Observer" display="Step Month">go</button>
-    <button x="5" y="264" width="205" height="36" disableUntilTicks="true" forever="false" kind="Observer" display="Build More +1">build-more</button>
-    <button x="5" y="306" width="205" height="36" disableUntilTicks="true" forever="false" kind="Observer" display="Statistics">show-statistics</button>
-    <button x="5" y="348" width="205" height="36" disableUntilTicks="true" forever="false" kind="Observer" display="Sustainable Solutions">choose-solution</button>
-    <note x="5" y="390" width="205" height="70" fontSize="14" markdown="false" textColorLight="-1" textColorDark="-1" backgroundLight="-15458772" backgroundDark="-15458772">Apply counts with Setup.
+    <slider x="5" step="1" y="65" max="50" width="205" display="starting-data-centers" height="50" min="1" direction="Horizontal" default="8.0" variable="starting-data-centers"></slider>
+    <slider x="5" step="1" y="120" max="50" width="205" display="starting-households" height="50" min="1" direction="Horizontal" default="16.0" variable="starting-households"></slider>
+    <button x="5" y="180" height="36" disableUntilTicks="false" forever="false" kind="Observer" width="205" display="Setup / Reset">setup</button>
+    <button x="5" y="222" height="36" disableUntilTicks="true" forever="true" kind="Observer" width="100" display="Run / Pause">go</button>
+    <button x="111" y="222" height="36" disableUntilTicks="true" forever="false" kind="Observer" width="99" display="Step Month">go</button>
+    <button x="5" y="264" height="36" disableUntilTicks="true" forever="false" kind="Observer" width="205" display="Build More +1">build-more</button>
+    <button x="5" y="306" height="36" disableUntilTicks="true" forever="false" kind="Observer" width="205" display="Statistics">show-statistics</button>
+    <button x="5" y="348" height="36" disableUntilTicks="true" forever="false" kind="Observer" width="205" display="Sustainable Solutions">choose-solution</button>
+    <note x="5" y="390" backgroundDark="-15458772" fontSize="14" width="205" markdown="false" height="70" textColorDark="-1" textColorLight="-1" backgroundLight="-15458772">Apply counts with Setup.
 Reset clears history and
 turns solutions OFF.</note>
-    <view x="220" y="5" width="1004" height="460" minPxcor="0" maxPxcor="124" minPycor="0" maxPycor="56" patchSize="8.0" wrappingAllowedX="false" wrappingAllowedY="false" frameRate="10.0" updateMode="1" showTickCounter="false" tickCounterLabel="months" fontSize="16"></view>
-    <monitor x="5" y="472" width="300" height="50" precision="2" fontSize="14" display="Water supply · reservoir %">water-supply-percent</monitor>
-    <monitor x="311" y="472" width="300" height="50" precision="2" fontSize="14" display="Grid demand · capacity %">grid-demand-percent</monitor>
-    <monitor x="617" y="472" width="300" height="50" precision="2" fontSize="14" display="Green coverage · baseline %">green-coverage-percent</monitor>
-    <monitor x="923" y="472" width="300" height="50" precision="1" fontSize="14" display="Illustrative well-being / 100">word precision wellbeing-score 1 (word " · " condition-for wellbeing-score)</monitor>
-    <plot x="5" y="530" width="400" height="195" xMin="0" xMax="6" yMin="0" yMax="100" autoPlotX="true" autoPlotY="false" legend="false" xAxis="Elapsed years (12 months)" yAxis="Reservoir %" display="Water Supply">
-      <setup></setup><update>plotxy (ticks / 12) water-supply-percent</update>
-      <pen interval="1" mode="0" display="Water stock" color="-14785356" legend="true"><setup></setup><update></update></pen>
+    <monitor x="5" precision="2" y="472" height="60" fontSize="14" width="300" display="Water supply · reservoir %">water-supply-percent</monitor>
+    <monitor x="311" precision="2" y="472" height="60" fontSize="14" width="300" display="Grid demand · capacity %">grid-demand-percent</monitor>
+    <monitor x="617" precision="2" y="472" height="60" fontSize="14" width="300" display="Green coverage · baseline %">green-coverage-percent</monitor>
+    <monitor x="923" precision="1" y="472" height="60" fontSize="14" width="300" display="Illustrative well-being / 100">word precision wellbeing-score 1 (word " · " condition-for wellbeing-score)</monitor>
+    <plot x="5" autoPlotX="true" yMax="100.0" autoPlotY="false" yAxis="Reservoir %" y="530" xMin="0.0" height="195" legend="false" xMax="6.0" yMin="0.0" width="400" xAxis="Elapsed years (12 months)" display="Water Supply">
+      <setup></setup>
+      <update>plotxy (ticks / 12) water-supply-percent</update>
+      <pen interval="1.0" mode="0" display="Water stock" color="-14785356" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
     </plot>
-    <plot x="415" y="530" width="400" height="195" xMin="0" xMax="6" yMin="0" yMax="110" autoPlotX="true" autoPlotY="true" legend="true" xAxis="Elapsed years (12 months)" yAxis="Grid %" display="Grid Demand">
-      <setup></setup><update>set-current-plot-pen "Demand"
+    <plot x="415" autoPlotX="true" yMax="110.0" autoPlotY="true" yAxis="Grid %" y="530" xMin="0.0" height="195" legend="true" xMax="6.0" yMin="0.0" width="400" xAxis="Elapsed years (12 months)" display="Grid Demand">
+      <setup></setup>
+      <update>set-current-plot-pen "Demand"
 plotxy (ticks / 12) grid-demand-percent
 set-current-plot-pen "Capacity"
 plotxy (ticks / 12) 100</update>
-      <pen interval="1" mode="0" display="Demand" color="-4950252" legend="true"><setup></setup><update></update></pen>
-      <pen interval="1" mode="0" display="Capacity" color="-7500403" legend="true"><setup></setup><update></update></pen>
+      <pen interval="1.0" mode="0" display="Demand" color="-4950252" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="Capacity" color="-7500403" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
     </plot>
-    <plot x="825" y="530" width="399" height="195" xMin="0" xMax="6" yMin="0" yMax="100" autoPlotX="true" autoPlotY="false" legend="false" xAxis="Elapsed years (12 months)" yAxis="Vegetation %" display="Green Coverage">
-      <setup></setup><update>plotxy (ticks / 12) green-coverage-percent</update>
-      <pen interval="1" mode="0" display="Vegetation" color="-14777786" legend="true"><setup></setup><update></update></pen>
+    <plot x="825" autoPlotX="true" yMax="100.0" autoPlotY="false" yAxis="Vegetation %" y="530" xMin="0.0" height="195" legend="false" xMax="6.0" yMin="0.0" width="399" xAxis="Elapsed years (12 months)" display="Green Coverage">
+      <setup></setup>
+      <update>plotxy (ticks / 12) green-coverage-percent</update>
+      <pen interval="1.0" mode="0" display="Vegetation" color="-14777786" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
     </plot>
-    <note x="5" y="735" width="1219" height="50" fontSize="16" markdown="false" textColorLight="-1" textColorDark="-1" backgroundLight="-15458772" backgroundDark="-15458772">ADVANCED ASSUMPTIONS — illustrative defaults; apply all edits with Setup / Reset.
+    <note x="5" y="735" backgroundDark="-15458772" fontSize="16" width="1219" markdown="false" height="50" textColorDark="-1" textColorLight="-1" backgroundLight="-15458772">ADVANCED ASSUMPTIONS — illustrative defaults; apply all edits with Setup / Reset.
 Score = 40% water stock + 30% grid headroom + 30% green coverage. Healthy ≥75; Moderate ≥50; Stressed ≥25; Critical below 25.</note>
-    <slider x="5" y="795" width="400" height="50" min="0" max="10" step="0.1" default="1" direction="Horizontal" variable="facility-capacity-mw" display="facility-capacity-mw" units="MW"></slider>
-    <slider x="415" y="795" width="400" height="50" min="0" max="100" step="1" default="70" direction="Horizontal" variable="utilization-percent" display="utilization-percent" units="%"></slider>
-    <slider x="825" y="795" width="399" height="50" min="1" max="3" step="0.1" default="1.6" direction="Horizontal" variable="pue" display="pue"></slider>
-    <slider x="5" y="855" width="400" height="50" min="0" max="5" step="0.1" default="1" direction="Horizontal" variable="wue-l-per-kwh" display="wue-l-per-kwh" units="L/IT kWh"></slider>
-    <slider x="415" y="855" width="400" height="50" min="0" max="2000" step="50" default="500" direction="Horizontal" variable="household-liters-day" display="household-liters-day" units="L/day"></slider>
-    <slider x="825" y="855" width="399" height="50" min="0" max="10" step="0.1" default="2" direction="Horizontal" variable="household-kw" display="household-kw" units="kW/home"></slider>
-    <slider x="5" y="915" width="400" height="50" min="1" max="200" step="1" default="40" direction="Horizontal" variable="reservoir-capacity-ml" display="reservoir-capacity-ml" units="ML"></slider>
-    <slider x="415" y="915" width="400" height="50" min="0" max="40" step="0.5" default="8" direction="Horizontal" variable="recharge-ml-month" display="recharge-ml-month" units="ML/month"></slider>
-    <slider x="825" y="915" width="399" height="50" min="1" max="200" step="1" default="40" direction="Horizontal" variable="grid-capacity-mw" display="grid-capacity-mw" units="MW"></slider>
-    <chooser x="5" y="975" width="400" height="60" variable="water-allocation-policy" current="0" display="water-allocation-policy"><choice type="string" value="proportional"></choice><choice type="string" value="community-first"></choice><choice type="string" value="data-center-first"></choice></chooser>
-    <slider x="415" y="975" width="400" height="50" min="12" max="240" step="12" default="72" direction="Horizontal" variable="duration-months" display="duration-months" units="months"></slider>
-    <monitor x="825" y="975" width="399" height="60" precision="0" fontSize="14" display="Settings">ifelse-value (selected-settings = applied-settings) ["Applied"] ["Changed — apply with Setup"]</monitor>
-    <note x="5" y="1045" width="1219" height="75" fontSize="16" markdown="false" textColorLight="-1" textColorDark="-1" backgroundLight="-15458772" backgroundDark="-15458772">Recycled water replaces 50% of facility freshwater. Solar supplies 40% of facility electricity.
+    <slider x="5" step="0.1" y="795" max="10" width="400" display="facility-capacity-mw" height="50" min="0" direction="Horizontal" default="1.0" variable="facility-capacity-mw" units="MW"></slider>
+    <slider x="415" step="1" y="795" max="100" width="400" display="utilization-percent" height="50" min="0" direction="Horizontal" default="70.0" variable="utilization-percent" units="%"></slider>
+    <slider x="825" step="0.1" y="795" max="3" width="399" display="pue" height="50" min="1" direction="Horizontal" default="1.6" variable="pue"></slider>
+    <slider x="5" step="0.1" y="855" max="5" width="400" display="wue-l-per-kwh" height="50" min="0" direction="Horizontal" default="1.0" variable="wue-l-per-kwh" units="L/IT kWh"></slider>
+    <slider x="415" step="50" y="855" max="2000" width="400" display="household-liters-day" height="50" min="0" direction="Horizontal" default="500.0" variable="household-liters-day" units="L/day"></slider>
+    <slider x="825" step="0.1" y="855" max="10" width="399" display="household-kw" height="50" min="0" direction="Horizontal" default="2.0" variable="household-kw" units="kW/home"></slider>
+    <slider x="5" step="1" y="915" max="200" width="400" display="reservoir-capacity-ml" height="50" min="1" direction="Horizontal" default="40.0" variable="reservoir-capacity-ml" units="ML"></slider>
+    <slider x="415" step="0.5" y="915" max="40" width="400" display="recharge-ml-month" height="50" min="0" direction="Horizontal" default="8.0" variable="recharge-ml-month" units="ML/month"></slider>
+    <slider x="825" step="1" y="915" max="200" width="399" display="grid-capacity-mw" height="50" min="1" direction="Horizontal" default="40.0" variable="grid-capacity-mw" units="MW"></slider>
+    <chooser x="5" y="975" height="60" variable="water-allocation-policy" current="0" width="400" display="water-allocation-policy">
+      <choice type="string" value="proportional"></choice>
+      <choice type="string" value="community-first"></choice>
+      <choice type="string" value="data-center-first"></choice>
+    </chooser>
+    <slider x="415" step="12" y="975" max="240" width="400" display="duration-months" height="50" min="12" direction="Horizontal" default="240.0" variable="duration-months" units="months"></slider>
+    <monitor x="825" precision="0" y="975" height="60" fontSize="14" width="399" display="Settings">ifelse-value (selected-settings = applied-settings) ["Applied"] ["Changed — apply with Setup"]</monitor>
+    <note x="5" y="1045" backgroundDark="-15458772" fontSize="16" width="1219" markdown="false" height="75" textColorDark="-1" textColorLight="-1" backgroundLight="-15458772">Recycled water replaces 50% of facility freshwater. Solar supplies 40% of facility electricity.
 Reforestation restores eligible cleared ground over 12 months, never beneath buildings. Recovery is not guaranteed.
 Hypothetical teaching assumptions; no actual PAX Silica forecast. Artwork: Icons8 Fluency — https://icons8.com (see Info).</note>
   </widgets>
@@ -546,26 +565,51 @@ Artwork: [Icons8](https://icons8.com), Fluency family: Cottage, Server, Deciduou
 [U.S. DOE FEMP: Cooling Water Efficiency Opportunities](https://www.energy.gov/cmei/femp/cooling-water-efficiency-opportunities-federal-data-centers) supplies metric background; all numerical defaults here are illustrative.
 
 Legacy model, tests and results are preserved separately. V2 intentionally changes the scope and must not be presented as numerically equivalent to V1.]]></info>
-  <turtleShapes><shape name="default" rotatable="true" editableColorIndex="0"><polygon color="-1920102913" filled="true" marked="true"><point x="150" y="5"></point><point x="40" y="250"></point><point x="150" y="205"></point><point x="260" y="250"></point></polygon></shape></turtleShapes>
+  <turtleShapes>
+    <shape name="default" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="5"></point>
+        <point x="40" y="250"></point>
+        <point x="150" y="205"></point>
+        <point x="260" y="250"></point>
+      </polygon>
+    </shape>
+  </turtleShapes>
   <linkShapes></linkShapes>
   <previewCommands>setup</previewCommands>
   <experiments>
     <experiment name="v2-scenarios" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="true" timeLimit="72">
-      <setup>setup-experiment</setup><go>go-experiment</go><exitCondition>complete?</exitCondition>
+      <setup>setup-experiment</setup>
+      <go>go-experiment</go>
+      <exitCondition>complete?</exitCondition>
       <metrics>
-        <metric>ticks</metric><metric>count data-centers</metric><metric>count households</metric>
-        <metric>reservoir-ml</metric><metric>water-supply-percent</metric><metric>dc-request-ml</metric>
-        <metric>household-request-ml</metric><metric>shortfall-ml</metric><metric>grid-demand-percent</metric>
-        <metric>green-coverage-percent</metric><metric>wellbeing-score</metric><metric>condition-for wellbeing-score</metric>
+        <metric>ticks</metric>
+        <metric>count data-centers</metric>
+        <metric>count households</metric>
+        <metric>reservoir-ml</metric>
+        <metric>water-supply-percent</metric>
+        <metric>dc-request-ml</metric>
+        <metric>household-request-ml</metric>
+        <metric>shortfall-ml</metric>
+        <metric>grid-demand-percent</metric>
+        <metric>green-coverage-percent</metric>
+        <metric>wellbeing-score</metric>
+        <metric>condition-for wellbeing-score</metric>
         <metric>balance-error-ml</metric>
       </metrics>
-      <constants></constants>
-      <subExperiments><subExperiment><enumeratedValueSet variable="experiment-case">
-        <value value="&quot;baseline&quot;"></value><value value="&quot;expansion&quot;"></value>
-        <value value="&quot;recycled-water&quot;"></value><value value="&quot;solar&quot;"></value>
-        <value value="&quot;reforestation&quot;"></value><value value="&quot;combined&quot;"></value>
-        <value value="&quot;maximum&quot;"></value>
-      </enumeratedValueSet></subExperiment></subExperiments>
+      <subExperiments>
+        <subExperiment>
+          <enumeratedValueSet variable="experiment-case">
+            <value value="&quot;baseline&quot;"></value>
+            <value value="&quot;expansion&quot;"></value>
+            <value value="&quot;recycled-water&quot;"></value>
+            <value value="&quot;solar&quot;"></value>
+            <value value="&quot;reforestation&quot;"></value>
+            <value value="&quot;combined&quot;"></value>
+            <value value="&quot;maximum&quot;"></value>
+          </enumeratedValueSet>
+        </subExperiment>
+      </subExperiments>
     </experiment>
   </experiments>
 </model>
