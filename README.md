@@ -60,5 +60,3 @@ In NetLogo 7.0.4, the baseline ended month 72 with 39.35 ML in the reservoir and
 - PAX Silica project background. [PCO / BCDA project context](https://pco.gov.ph/news_releases/bcda-says-pax-silica-project-could-generate-over-130000-high-quality-jobs/)
 - Energy and water metric background. [U.S. DOE FEMP cooling-water efficiency guidance](https://www.energy.gov/cmei/femp/cooling-water-efficiency-opportunities-federal-data-centers)
 - Course collaboration. [Project Ideas working document](https://docs.google.com/document/d/1kEvWeX4g3D4UFAYUSCoRyC-APubSqgBAyP7mwPBvUk/edit)
-
-Before submission, add group members to the model's **Info** tab and confirm that the instructor can open NetLogo 7's .nlogox format. Present the results as outcomes under the selected teaching assumptions.
