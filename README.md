@@ -1,6 +1,6 @@
 # AI Data Center Water-Energy Nexus
 
-**Latest: [V2.2 light pixel-art dashboard](v2.2/README.md)** — open `v2.2/models/ai-data-center-community-v2.2.nlogox` in NetLogo 7.0.4.
+**Latest: [V2.1.3 light pixel-art dashboard](v2.2/README.md)** — open `v2.2/models/ai-data-center-community-v2.2.nlogox` in NetLogo 7.0.4.
 
 **Preserved comparison: [V2.1 natural layout](v2.1/README.md)** — open its model to return to that design without restoring or overwriting files. The original [`v2/`](v2/README.md), this page and V1 model remain preserved.
 
